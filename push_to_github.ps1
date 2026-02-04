@@ -10,7 +10,8 @@ if ([string]::IsNullOrWhiteSpace($currentEmail)) {
     if (-not [string]::IsNullOrWhiteSpace($email)) {
         git config --global user.email $email
     }
-} else {
+}
+else {
     Write-Host "Git Email: $currentEmail" -ForegroundColor Gray
 }
 
@@ -20,14 +21,16 @@ if ([string]::IsNullOrWhiteSpace($currentName)) {
     if (-not [string]::IsNullOrWhiteSpace($name)) {
         git config --global user.name $name
     }
-} else {
+}
+else {
     Write-Host "Git Name: $currentName" -ForegroundColor Gray
 }
 
 # 2. Check/Set Remote
 try {
     $currentRemote = git remote get-url origin 2>$null
-} catch {
+}
+catch {
     $currentRemote = $null
 }
 
@@ -41,7 +44,8 @@ if ([string]::IsNullOrWhiteSpace($currentRemote)) {
         git remote add origin $repoUrl
         Write-Host "Remote set to: $repoUrl" -ForegroundColor Green
     }
-} else {
+}
+else {
     Write-Host "Remote Origin: $currentRemote" -ForegroundColor Gray
 }
 
@@ -51,7 +55,8 @@ git push -u origin master
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nSuccessfully pushed to GitHub!" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host "`nPush failed. Check errors above." -ForegroundColor Red
 }
 Read-Host "Press Enter to exit"
