@@ -83,6 +83,7 @@ def render_text_to_image(text, font_name, font_size, width, height, text_color=(
     Render text using Windows GDI to a PIL Image.
     This handles complex scripts (Arabic) natively with correct shaping and GPOS.
     """
+    print(f"[DEBUG] GDI Render: Font='{font_name}', Charset=178, Quality=ClearType")
     
     # 1. Create Device Contexts
     hwin = user32.GetDesktopWindow()
@@ -103,10 +104,10 @@ def render_text_to_image(text, font_name, font_size, width, height, text_color=(
     hfont = gdi32.CreateFontW(
         lfHeight, 0, 0, 0, 
         FW_NORMAL, 0, 0, 0, 
-        DEFAULT_CHARSET, 
+        ARABIC_CHARSET, 
         OUT_TT_PRECIS, 
         CLIP_DEFAULT_PRECIS, 
-        ANTIALIASED_QUALITY, 
+        CLEARTYPE_QUALITY, 
         DEFAULT_PITCH | FF_DONTCARE, 
         font_name
     )
@@ -212,10 +213,10 @@ def measure_text_height(text, font_name, font_size, width):
     hfont = gdi32.CreateFontW(
         lfHeight, 0, 0, 0, 
         FW_NORMAL, 0, 0, 0, 
-        DEFAULT_CHARSET, # Changed from ARABIC_CHARSET
+        ARABIC_CHARSET, # Changed for better shaping
         OUT_TT_PRECIS, 
         CLIP_DEFAULT_PRECIS, 
-        ANTIALIASED_QUALITY, 
+        CLEARTYPE_QUALITY, 
         DEFAULT_PITCH | FF_DONTCARE, 
         font_name
     )

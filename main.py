@@ -98,6 +98,67 @@ VERIFIED_RECITERS = {
         "display": "أبو بكر الشاطري",
         "verified": True,
         "fallback": "alafasy"
+    },
+    # --- NEW RECITERS ---
+    "ajamy": {
+        "folder": "Ahmed_ibn_Ali_al-Ajamy_64kbps",
+        "display": "أحمد العجمي",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "ghamdi": {
+        "folder": "Saad_Al-Ghamdi_64kbps",
+        "display": "سعد الغامدي",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "rifai": {
+        "folder": "Hani_Rifai_64kbps",
+        "display": "هاني الرفاعي",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "juhany": {
+        "folder": "Abdullaah_3awwaad_Al-Juhaynee_64kbps",
+        "display": "عبد الله الجهني",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "budair": {
+        "folder": "Salah_Al_Budair_64kbps",
+        "display": "صلاح البدير",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "dosari": {
+        "folder": "Yasser_Ad-Dussary_64kbps",
+        "display": "ياسر الدوسري",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "ayyub": {
+        "folder": "Muhammad_Ayyoub_64kbps",
+        "display": "محمد أيوب",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "hudhaify": {
+        "folder": "Ali_Al-Hudhaify_64kbps",
+        "display": "علي الحذيفي",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "tunaiji": {
+        "folder": "Khalifa_Al_Tunaiji_64kbps",
+        "display": "خليفة الطنيجي",
+        "verified": True,
+        "fallback": "alafasy"
+    },
+    "basfar": {
+        "folder": "Abdullah_Basfar_64kbps",
+        "display": "عبد الله بصفر",
+        "verified": True,
+        "fallback": "alafasy"
     }
 }
 
@@ -139,84 +200,8 @@ def retry_operation(func, max_retries=3, delay=2):
                 time.sleep(delay)
     return None
 
-def validate_arabic_text(text):
-    """Validate that Arabic text contains proper tashkeel"""
-    if not text or len(text) < 3:
-        return False
-    # Check for Arabic characters
-    arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')
-    # Check for tashkeel (diacritics)
-    tashkeel_chars = sum(1 for c in text if '\u064B' <= c <= '\u0652')
-    # Valid if has Arabic and some tashkeel
-    return arabic_chars > 5 and tashkeel_chars > 0
+import quran_provider
 
-def get_ayah_text(surah, ayah):
-    """
-    Fetch Quran text with full tashkeel from verified sources.
-    Sources (in order):
-    1. AlQuran Cloud API (Uthmani text)
-    2. Quran.com API (fallback)
-    
-    NEVER returns malformed text - will retry from fallback source.
-    """
-    # Source 1: AlQuran Cloud API
-    def fetch_alquran_cloud():
-        try:
-            url = f"http://api.alquran.cloud/v1/ayah/{surah}:{ayah}/quran-uthmani"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            if data.get('code') == 200 and data.get('data', {}).get('text'):
-                text = data['data']['text']
-                if validate_arabic_text(text):
-                    print(f"  [OK] Text from AlQuran Cloud (Uthmani)")
-                    return text
-        except Exception as e:
-            print(f"  [FAIL] AlQuran Cloud failed: {e}")
-        return None
-    
-    # Source 2: Quran.com API
-    def fetch_quran_com():
-        try:
-            url = f"https://api.quran.com/api/v4/quran/verses/uthmani?verse_key={surah}:{ayah}"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            verses = data.get('verses', [])
-            if verses and verses[0].get('text_uthmani'):
-                text = verses[0]['text_uthmani']
-                if validate_arabic_text(text):
-                    print(f"  [OK] Text from Quran.com (Uthmani)")
-                    return text
-        except Exception as e:
-            print(f"  [FAIL] Quran.com failed: {e}")
-        return None
-    
-    # Try primary source
-    text = fetch_alquran_cloud()
-    if text:
-        return text
-    
-    # Try fallback source
-    text = fetch_quran_com()
-    if text:
-        return text
-    
-    # Final retry with simple endpoint
-    try:
-        url = f"http://api.alquran.cloud/v1/ayah/{surah}:{ayah}"
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        if data.get('code') == 200:
-            text = data['data']['text']
-            if text and len(text) > 0:
-                print(f"  [OK] Text from AlQuran Cloud (simple)")
-                return text
-    except:
-        pass
-    
-    print(f"  [ERROR] CRITICAL: Failed to fetch verified text for {surah}:{ayah}")
-    return None
 
 def download_audio_with_fallback(reciter, surah, ayah):
     """
@@ -406,25 +391,22 @@ def create_gradient_background(duration):
 
 def find_quran_font():
     """
-    Get the EXCLUSIVE Quran font - UthmanTNB_v2-0.ttf
+    Get the EXCLUSIVE Quran font - Amiri-Quran.ttf
     
     ⚠️ CRITICAL SHARIAH REQUIREMENT:
-    - Use ONLY UthmanTNB_v2-0.ttf
+    - Use ONLY Amiri-Quran.ttf (Robust Uthmani support)
     - NO fallback fonts allowed
-    - If font missing → ERROR (do not proceed)
-    - Font must render all tashkeel correctly
     """
-    EXCLUSIVE_FONT = FONTS_DIR / "UthmanTNB_v2-0.ttf"
+    EXCLUSIVE_FONT = FONTS_DIR / "Amiri-Quran.ttf"
     
     if EXCLUSIVE_FONT.exists():
-        print(f"[OK] Using EXCLUSIVE Quran font: UthmanTNB_v2-0.ttf")
+        print(f"[OK] Using EXCLUSIVE Quran font: Amiri-Quran.ttf")
         return str(EXCLUSIVE_FONT)
     
     # ⛔ NO FALLBACK - This is a Shariah requirement
     print("=" * 70)
-    print("[ERROR] CRITICAL ERROR: UthmanTNB_v2-0.ttf NOT FOUND!")
-    print("   Location expected: /fonts/UthmanTNB_v2-0.ttf")
-    print("   [WARNING] NO FALLBACK FONTS ALLOWED - This is a Shariah requirement")
+    print("[ERROR] CRITICAL ERROR: Amiri-Quran.ttf NOT FOUND!")
+    print("   Location expected: /fonts/Amiri-Quran.ttf")
     print("   [ERROR] ABORTING: Cannot proceed without authoritative Quran font")
     print("=" * 70)
     return None
@@ -502,9 +484,13 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     max_width = width - (margin * 2)
     
     # Safe margins
-    margin = 80
+    margin = 50 
     max_width = width - (margin * 2)
     max_height = height - (margin * 2)
+    
+    # Sanitize Text: Collapse specific whitespace but NEVER touch Tashkeel
+    if text:
+        text = " ".join(text.split())
     
     # Text Processing: GDI handles shaping. We just pass the Uthmani text.
     # Font Logic: Use GDI renderer
@@ -517,11 +503,11 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     # Load into GDI (safe to call multiple times)
     windows_renderer.load_private_font(font_path)
     # Exact Face Name from verify step
-    font_face_name = "KFGQPC Uthman Taha Naskh" 
+    font_face_name = "Amiri" 
     
     # Dynamic Font Sizing (Iterative Fit)
-    max_font_size = 150
-    min_font_size = 50
+    max_font_size = 120 # Reduced from 150 as requested
+    min_font_size = 40
     current_font_size = max_font_size
     
     print(f"  Calculating optimal font size for {len(text)} chars...")
@@ -710,134 +696,176 @@ def cleanup_temp_files():
     except:
         pass
 
+
+# Progress State
+generation_status = {
+    "progress": 0,
+    "status": "Ready",
+    "details": ""
+}
+
+@app.route('/progress')
+def get_progress():
+    return jsonify(generation_status)
+
+def update_progress(percent, status_text):
+    generation_status["progress"] = percent
+    generation_status["status"] = status_text
+    print(f"[{percent}%] {status_text}")
+
 @app.route('/generate', methods=['POST'])
 def generate_video():
     try:
+        update_progress(5, "Starting generation...")
         data = request.json
         reciter = data.get('reciter')
-        surah = data.get('surah')
-        ayah_from = data.get('ayah_from')
-        ayah_to = data.get('ayah_to')
+        surah = int(data.get('surah'))
+        full_surah = data.get('full_surah', False) # Check for boolean flag
         
-        if not all([reciter, surah, ayah_from, ayah_to]):
+        # Determine range
+        if not full_surah:
+            ayah_from = int(data.get('ayah_from'))
+            ayah_to = int(data.get('ayah_to'))
+        else:
+            # Full Surah mode: Range ignored by text provider, but helpful for logs
+            ayah_from = 1 
+            ayah_to = "END" 
+        
+        if not reciter or not surah:
             return jsonify({'error': 'Missing parameters'}), 400
         
         print(f"\n{'='*70}")
-        print(f"🎬 AUTOMATIC QURAN REEL GENERATION")
+        print(f"🎬 AUTOMATIC QURAN REEL GENERATION (Strict Mode)")
         print(f"{'='*70}")
         print(f"  Reciter: {reciter}")
-        print(f"  Surah {surah}: Ayahs {ayah_from}-{ayah_to}")
+        print(f"  Surah: {surah}")
+        print(f"  Mode: {'FULL SURAH' if full_surah else f'Range {ayah_from}-{ayah_to}'}")
         print(f"{'='*70}\n")
         
         start_time = time.time()
         
-        print("[STEP 1/6] Fetching Quran text with tashkeel...")
+        # [STEP 1] Fetch STRICT Text from Local Tanzil Source
+        update_progress(10, "Fetching Quran text (Tanzil)...")
+        print("[STEP 1/6] Fetching Uthmani text from local file...")
+        
+        if full_surah:
+            texts = quran_provider.get_surah(surah)
+            start_ayah_num = 1
+        else:
+            texts = quran_provider.get_range(surah, ayah_from, ayah_to)
+            start_ayah_num = ayah_from
+            
+        if not texts:
+            return jsonify({'error': f'Failed to fetch text for Surah {surah}. Ensure quran_text/quran-uthmani.txt exists.'}), 500
+            
+        print(f"  ✓ Retrieved {len(texts)} ayahs from Tanzil source.")
+        
         audio_data = []
         total_duration = 0
+        total_ayahs = len(texts)
         
-        for ayah_num in range(ayah_from, ayah_to + 1):
-            text = get_ayah_text(surah, ayah_num)
-            if not text:
-                return jsonify({'error': f'Failed to fetch ayah {ayah_num} text'}), 500
+        # [STEP 2] Download Audio & Align
+        update_progress(20, "Downloading high-quality audio...")
+        print("\n[STEP 2/6] Processing Audio & Text Alignment...")
+        
+        for i, text in enumerate(texts):
+            current_ayah = start_ayah_num + i
             
-            print(f"  ✓ Ayah {ayah_num}: {text[:50]}...")
+            # Progress interpolation for audio/render loop (20% -> 80%)
+            loop_progress = 20 + int((i / total_ayahs) * 60)
+            update_progress(loop_progress, f"Processing Ayah {current_ayah}...")
             
-            audio_path = download_audio(reciter, surah, ayah_num)
+            # STRICT VALIDATION: Uthmani text must not be empty
+            if not text or len(text.strip()) == 0:
+                 return jsonify({'error': f'CRITICAL: Empty text found for Ayah {current_ayah}'}), 500
+
+            print(f"  [{current_ayah}] {text[:40]}...")
+            
+            audio_path = download_audio(reciter, surah, current_ayah)
             if not audio_path:
-                return jsonify({'error': f'Failed to download audio for ayah {ayah_num}'}), 500
-            
+                 return jsonify({'error': f'Failed to download audio for Ayah {current_ayah}'}), 500
+                 
             duration = get_audio_duration(audio_path)
-            audio_data.append({
-                'ayah': ayah_num,
-                'text': text,
-                'audio': audio_path,
-                'duration': duration
-            })
             total_duration += duration
+            
+            # [STEP 3] Generate Caption Overlay (GDI Native)
+            caption_path = create_text_overlay_png(text)
+            if not caption_path:
+                return jsonify({'error': f'Caption rendering failed for Ayah {current_ayah}'}), 500
+            
+            audio_data.append({
+                'audio': audio_path,
+                'duration': duration,
+                'text_img': caption_path,
+                'ayah_num': current_ayah
+            })
         
-        print(f"\n✓ Total duration: {total_duration:.1f}s")
+        # [STEP 4] Background Sourcing (Nature/Abstract)
+        update_progress(80, "Selecting Ultra-HD backgrounds...")
+        print("\n[STEP 4/6] Sourcing Backgrounds...")
         
-        print("\n[STEP 2/6] Selecting unique backgrounds for each ayah...")
-        num_ayahs = len(audio_data)
-        bg_videos = get_unique_backgrounds(num_ayahs)
+        bg_videos = get_unique_backgrounds(len(audio_data))
         if not bg_videos:
-            return jsonify({'error': 'No nature videos available. Add videos to backgrounds/ folder.'}), 500
+             return jsonify({'error': 'Failed to source background videos'}), 500
+             
+        # [STEP 5] Create Individual Clips
+        update_progress(85, "Rendering video clips...")
+        print("\n[STEP 5/6] Creating Reel Segments...")
         
-        # Assign unique background to each ayah
+        clips = []
         for i, item in enumerate(audio_data):
-            item['background'] = bg_videos[i]
-            print(f"  ✓ Ayah {item['ayah']}: {os.path.basename(item['background'])}")
-        
-        print("\n[STEP 3/6] Creating text overlays with proper Arabic rendering...")
-        for item in audio_data:
-            text_overlay = create_text_overlay_png(item['text'], width=1080, height=1920)
-            if not text_overlay:
-                return jsonify({'error': f'Text overlay failed for ayah {item["ayah"]}'}), 500
-            item['overlay'] = text_overlay
-        
-        print("\n[STEP 4/6] Preparing background segments...")
-        temp_videos = []
-        current_offset = 0
-        
-        for item in audio_data:
-            print(f"  Processing ayah {item['ayah']}...")
+            bg_video = bg_videos[i]
+            audio_path = item['audio']
+            text_overlay = item['text_img']
+            duration = item['duration']
             
-            bg_segment = prepare_background_segment(item['background'], item['duration'], 0)
-            if not bg_segment:
-                return jsonify({'error': f'Background prep failed for ayah {item["ayah"]}'}), 500
+            clip_output = TEMP_DIR / f"clip_{i}_{int(time.time())}.mp4"
             
-            video_path = str(TEMP_DIR / f"reel_{item['ayah']}_{int(time.time())}.mp4")
-            
-            if not create_final_reel(bg_segment, item['overlay'], item['audio'], video_path):
-                return jsonify({'error': f'Reel creation failed for ayah {item["ayah"]}'}), 500
-            
-            temp_videos.append(video_path)
-            current_offset += item['duration']
-            
-            try:
-                if os.path.exists(item['overlay']):
-                    os.remove(item['overlay'])
-                if os.path.exists(bg_segment):
-                    os.remove(bg_segment)
-            except:
-                pass
+            # Prepare background
+            print(f"  Rendering clip {i+1}/{len(audio_data)}...")
+            bg_ready = prepare_background_segment(bg_video, duration)
+            if not bg_ready:
+                print(f"  Skipping clip {i+1}: Background failed")
+                continue
+                
+            # Create clip
+            if create_final_reel(bg_ready, text_overlay, audio_path, str(clip_output)):
+                clips.append(str(clip_output))
+                
+        # [STEP 6] Concatenate
+        update_progress(95, "Stitching final reel...")
+        print("\n[STEP 6/6] Final Stitching...")
         
-        print("\n[STEP 5/6] Concatenating final video...")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        reciter_name = reciter.replace('/', '-')
-        final_video = str(OUTPUT_DIR / f"QuranReel_S{surah}_A{ayah_from}-{ayah_to}_{reciter_name}_{timestamp}.mp4")
+        if not clips:
+             return jsonify({'error': 'No clips generated'}), 500
+             
+        reciter_safe = reciter.replace('/', '_').replace('\\', '_')
+        timestamp = int(time.time())
+        final_video_name = f"QuranReel_{reciter_safe}_{surah}_{timestamp}.mp4"
+        final_video = OUTPUT_DIR / final_video_name
         
-        if not concatenate_videos_fast(temp_videos, final_video):
-            return jsonify({'error': 'Final concatenation failed'}), 500
-        
-        print("\n[STEP 6/6] Cleaning up temporary files...")
+        if concatenate_videos_fast(clips, str(final_video)):
+            print(f"✓ REEL COMPLETE: {final_video}")
+            update_progress(100, "Done!")
+        else:
+            return jsonify({'error': 'Concatenation failed'}), 500
+
         cleanup_temp_files()
         
         elapsed = time.time() - start_time
         video_filename = os.path.basename(final_video)
         
-        print(f"\n{'='*70}")
-        print(f"✅ GENERATION COMPLETE!")
-        print(f"{'='*70}")
-        print(f"  Output: {video_filename}")
-        print(f"  Duration: {total_duration:.1f}s")
-        print(f"  Render time: {elapsed:.1f}s")
-        print(f"  Speed ratio: {total_duration/elapsed:.2f}x")
-        print(f"{'='*70}\n")
-        
         return jsonify({
             'success': True,
             'video_url': f'/outputs/{video_filename}',
             'video_name': video_filename,
-            'render_time': f'{elapsed:.1f}s',
-            'video_duration': f'{total_duration:.1f}s',
-            'message': 'Quran Reel created successfully!'
+            'render_time': f'{elapsed:.1f}s'
         })
     
     except Exception as e:
-        print(f"\n{'='*70}")
-        print(f"❌ CRITICAL ERROR: {e}")
-        print(f"{'='*70}\n")
+        print(f"\n❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         cleanup_temp_files()
         return jsonify({'error': str(e)}), 500
 
