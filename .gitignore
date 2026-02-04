@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+temp/
+output/
+test_output/
+audio/
+backgrounds/
+*.mp3
+*.mp4
+*.png
+!assets/*.png

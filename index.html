@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مولد ريلز القرآن الكريم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Dark Mode (Default) */
+            --bg-primary: #0f1729;
+            --bg-secondary: #1a2744;
+            --bg-card: #1e2d4a;
+            --text-primary: #e8eaf0;
+            --text-secondary: #a0aec0;
+            --accent: #7c8cc4;
+            --accent-hover: #9ba8d4;
+            --border: #2d3f5f;
+            --shadow: rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #FFFFFF;
+            --bg-secondary: #F8F8F8;
+            --bg-card: #FFFFFF;
+            --text-primary: #374151;
+            --text-secondary: #6B7280;
+            --accent: #7c8cc4;
+            --accent-hover: #6b7ab3;
+            --border: #E5E7EB;
+            --shadow: rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Amiri', Tahoma, sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            padding-bottom: 80px;
+            transition: background 0.4s ease, color 0.4s ease;
+            color: var(--text-primary);
+        }
+
+        /* Ramadan Decorations */
+        .ramadan-decorations {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            pointer-events: none;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            overflow: hidden;
+        }
+
+        .crescent {
+            font-size: 32px;
+            margin: 15px 20px 0;
+            opacity: 0.6;
+            animation: gentleFloat 8s ease-in-out infinite;
+        }
+
+        .lantern {
+            font-size: 24px;
+            margin: 10px 15px 0;
+            opacity: 0.5;
+            animation: gentleFloat 6s ease-in-out infinite;
+        }
+
+        .lantern:nth-child(2) {
+            animation-delay: -2s;
+        }
+
+        .lantern:nth-child(4) {
+            animation-delay: -4s;
+        }
+
+        @keyframes gentleFloat {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(5px);
+            }
+        }
+
+        .garland {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 40px;
+            border-bottom: 2px dashed var(--accent);
+            border-radius: 0 0 50% 50%;
+            opacity: 0.3;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px var(--shadow);
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+            border-color: var(--accent);
+        }
+
+        /* Main Container */
+        .container {
+            background: var(--bg-card);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px var(--shadow);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            margin-top: 60px;
+            border: 1px solid var(--border);
+            transition: all 0.4s ease;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'Amiri', serif;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        label .hint {
+            font-weight: 400;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: inherit;
+        }
+
+        select:focus,
+        input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(124, 140, 196, 0.2);
+        }
+
+        .range-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        /* Button */
+        button {
+            width: 100%;
+            padding: 16px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+            font-family: 'Amiri', serif;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px var(--shadow);
+        }
+
+        button:disabled {
+            background: var(--border);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Progress & Status */
+        .progress-container {
+            margin-top: 25px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .quran-verse {
+            text-align: center;
+            font-family: 'Amiri', serif;
+            font-size: 20px;
+            color: var(--accent);
+            margin: 20px 0;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .quran-verse.visible {
+            opacity: 1;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .status.success {
+            background: rgba(72, 187, 120, 0.15);
+            color: #48bb78;
+            border: 1px solid rgba(72, 187, 120, 0.3);
+        }
+
+        .status.error {
+            background: rgba(245, 101, 101, 0.15);
+            color: #f56565;
+            border: 1px solid rgba(245, 101, 101, 0.3);
+        }
+
+        .status.loading {
+            background: rgba(124, 140, 196, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(124, 140, 196, 0.3);
+        }
+
+        .download-link {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .download-link a {
+            display: inline-block;
+            padding: 14px 35px;
+            background: #48bb78;
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 700;
+            transition: all 0.3s;
+        }
+
+        .download-link a:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+        }
+
+        /* Fixed Footer */
+        .footer-message {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 15px 20px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-family: 'Amiri', serif;
+            line-height: 1.6;
+        }
+
+        .footer-message .moon {
+            margin-right: 5px;
+        }
+
+        /* Info Box */
+        .info-box {
+            background: var(--bg-secondary);
+            border-right: 3px solid var(--accent);
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Fade animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease;
+        }
+
+        /* Checkbox styling */
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 12px 15px;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+
+        .checkbox-label:hover {
+            border-color: var(--accent);
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-left: 12px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .checkbox-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        #ayahRangeGroup.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Ramadan Decorations -->
+    <div class="ramadan-decorations">
+        <div class="garland"></div>
+        <span class="lantern">🏮</span>
+        <span class="crescent">🌙</span>
+        <span class="lantern">🏮</span>
+    </div>
+
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" id="themeToggle" title="تبديل الوضع">
+        <span id="themeIcon">☀️</span>
+    </button>
+
+    <div class="container">
+        <div class="header">
+            <h1>🎬 مولد ريلز القرآن الكريم</h1>
+            <p class="subtitle">فيديوهات احترافية بخلفيات طبيعية ونص قرآني</p>
+            <span class="badge">1080×1920 | جودة عالية</span>
+        </div>
+
+        <div class="info-box">
+            💡 التوليد يستغرق 30-60 ثانية لكل آية. الخلفيات تُختار تلقائياً والنص بالرسم العثماني.
+        </div>
+
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="reciter">اختر القارئ <span class="hint">(جميع القراء مضمونون ✓)</span></label>
+                <select id="reciter" required>
+                    <option value="">اختر القارئ...</option>
+                    <option value="alafasy">مشاري العفاسي ✓</option>
+                    <option value="abdulbasit/murattal">عبد الباسط عبد الصمد - مرتل ✓</option>
+                    <option value="abdulbasit/mujawwad">عبد الباسط عبد الصمد - مجود ✓</option>
+                    <option value="husary">محمود خليل الحصري ✓</option>
+                    <option value="minshawi/murattal">محمد صديق المنشاوي - مرتل ✓</option>
+                    <option value="minshawi/mujawwad">محمد صديق المنشاوي - مجود ✓</option>
+                    <option value="maher">ماهر المعيقلي ✓</option>
+                    <option value="sudais">عبد الرحمن السديس ✓</option>
+                    <option value="shatri">أبو بكر الشاطري ✓</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="surah">اختر السورة</label>
+                <select id="surah" required>
+                    <option value="">اختر السورة...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="fullSurah">
+                    <span class="checkbox-text">السورة كاملة</span>
+                </label>
+            </div>
+
+            <div class="form-group" id="ayahRangeGroup">
+                <label>نطاق الآيات <span class="hint">(يُنصح بـ 1-3 آيات للريلز)</span></label>
+                <div class="range-inputs">
+                    <div>
+                        <input type="number" id="ayahFrom" placeholder="من آية" min="1" required>
+                    </div>
+                    <div>
+                        <input type="number" id="ayahTo" placeholder="إلى آية" min="1" required>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" id="generateBtn">
+                🎬 إنشاء الريل
+            </button>
+        </form>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-text" id="progressStatus">جاري التحضير...</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="quran-verse" id="quranVerse">﴿وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا﴾</div>
+        </div>
+
+        <div class="status" id="status"></div>
+        <div class="download-link" id="downloadLink"></div>
+    </div>
+
+    <!-- Fixed Footer Message -->
+    <div class="footer-message">
+        تم إنشاء هذا المشروع كصدقة جارية<br>
+        وكل سنة وأنتم طيبين <span class="moon">🌙</span>
+    </div>
+
+    <script>
+        // Surahs data
+        const surahs = [
+            { number: 1, name: "الفاتحة", verses: 7 },
+            { number: 2, name: "البقرة", verses: 286 },
+            { number: 3, name: "آل عمران", verses: 200 },
+            { number: 4, name: "النساء", verses: 176 },
+            { number: 5, name: "المائدة", verses: 120 },
+            { number: 6, name: "الأنعام", verses: 165 },
+            { number: 7, name: "الأعراف", verses: 206 },
+            { number: 8, name: "الأنفال", verses: 75 },
+            { number: 9, name: "التوبة", verses: 129 },
+            { number: 10, name: "يونس", verses: 109 },
+            { number: 11, name: "هود", verses: 123 },
+            { number: 12, name: "يوسف", verses: 111 },
+            { number: 13, name: "الرعد", verses: 43 },
+            { number: 14, name: "إبراهيم", verses: 52 },
+            { number: 15, name: "الحجر", verses: 99 },
+            { number: 16, name: "النحل", verses: 128 },
+            { number: 17, name: "الإسراء", verses: 111 },
+            { number: 18, name: "الكهف", verses: 110 },
+            { number: 19, name: "مريم", verses: 98 },
+            { number: 20, name: "طه", verses: 135 },
+            { number: 21, name: "الأنبياء", verses: 112 },
+            { number: 22, name: "الحج", verses: 78 },
+            { number: 23, name: "المؤمنون", verses: 118 },
+            { number: 24, name: "النور", verses: 64 },
+            { number: 25, name: "الفرقان", verses: 77 },
+            { number: 26, name: "الشعراء", verses: 227 },
+            { number: 27, name: "النمل", verses: 93 },
+            { number: 28, name: "القصص", verses: 88 },
+            { number: 29, name: "العنكبوت", verses: 69 },
+            { number: 30, name: "الروم", verses: 60 },
+            { number: 31, name: "لقمان", verses: 34 },
+            { number: 32, name: "السجدة", verses: 30 },
+            { number: 33, name: "الأحزاب", verses: 73 },
+            { number: 34, name: "سبأ", verses: 54 },
+            { number: 35, name: "فاطر", verses: 45 },
+            { number: 36, name: "يس", verses: 83 },
+            { number: 37, name: "الصافات", verses: 182 },
+            { number: 38, name: "ص", verses: 88 },
+            { number: 39, name: "الزمر", verses: 75 },
+            { number: 40, name: "غافر", verses: 85 },
+            { number: 41, name: "فصلت", verses: 54 },
+            { number: 42, name: "الشورى", verses: 53 },
+            { number: 43, name: "الزخرف", verses: 89 },
+            { number: 44, name: "الدخان", verses: 59 },
+            { number: 45, name: "الجاثية", verses: 37 },
+            { number: 46, name: "الأحقاف", verses: 35 },
+            { number: 47, name: "محمد", verses: 38 },
+            { number: 48, name: "الفتح", verses: 29 },
+            { number: 49, name: "الحجرات", verses: 18 },
+            { number: 50, name: "ق", verses: 45 },
+            { number: 51, name: "الذاريات", verses: 60 },
+            { number: 52, name: "الطور", verses: 49 },
+            { number: 53, name: "النجم", verses: 62 },
+            { number: 54, name: "القمر", verses: 55 },
+            { number: 55, name: "الرحمن", verses: 78 },
+            { number: 56, name: "الواقعة", verses: 96 },
+            { number: 57, name: "الحديد", verses: 29 },
+            { number: 58, name: "المجادلة", verses: 22 },
+            { number: 59, name: "الحشر", verses: 24 },
+            { number: 60, name: "الممتحنة", verses: 13 },
+            { number: 61, name: "الصف", verses: 14 },
+            { number: 62, name: "الجمعة", verses: 11 },
+            { number: 63, name: "المنافقون", verses: 11 },
+            { number: 64, name: "التغابن", verses: 18 },
+            { number: 65, name: "الطلاق", verses: 12 },
+            { number: 66, name: "التحريم", verses: 12 },
+            { number: 67, name: "الملك", verses: 30 },
+            { number: 68, name: "القلم", verses: 52 },
+            { number: 69, name: "الحاقة", verses: 52 },
+            { number: 70, name: "المعارج", verses: 44 },
+            { number: 71, name: "نوح", verses: 28 },
+            { number: 72, name: "الجن", verses: 28 },
+            { number: 73, name: "المزمل", verses: 20 },
+            { number: 74, name: "المدثر", verses: 56 },
+            { number: 75, name: "القيامة", verses: 40 },
+            { number: 76, name: "الإنسان", verses: 31 },
+            { number: 77, name: "المرسلات", verses: 50 },
+            { number: 78, name: "النبأ", verses: 40 },
+            { number: 79, name: "النازعات", verses: 46 },
+            { number: 80, name: "عبس", verses: 42 },
+            { number: 81, name: "التكوير", verses: 29 },
+            { number: 82, name: "الانفطار", verses: 19 },
+            { number: 83, name: "المطففين", verses: 36 },
+            { number: 84, name: "الانشقاق", verses: 25 },
+            { number: 85, name: "البروج", verses: 22 },
+            { number: 86, name: "الطارق", verses: 17 },
+            { number: 87, name: "الأعلى", verses: 19 },
+            { number: 88, name: "الغاشية", verses: 26 },
+            { number: 89, name: "الفجر", verses: 30 },
+            { number: 90, name: "البلد", verses: 20 },
+            { number: 91, name: "الشمس", verses: 15 },
+            { number: 92, name: "الليل", verses: 21 },
+            { number: 93, name: "الضحى", verses: 11 },
+            { number: 94, name: "الشرح", verses: 8 },
+            { number: 95, name: "التين", verses: 8 },
+            { number: 96, name: "العلق", verses: 19 },
+            { number: 97, name: "القدر", verses: 5 },
+            { number: 98, name: "البينة", verses: 8 },
+            { number: 99, name: "الزلزلة", verses: 8 },
+            { number: 100, name: "العاديات", verses: 11 },
+            { number: 101, name: "القارعة", verses: 11 },
+            { number: 102, name: "التكاثر", verses: 8 },
+            { number: 103, name: "العصر", verses: 3 },
+            { number: 104, name: "الهمزة", verses: 9 },
+            { number: 105, name: "الفيل", verses: 5 },
+            { number: 106, name: "قريش", verses: 4 },
+            { number: 107, name: "الماعون", verses: 7 },
+            { number: 108, name: "الكوثر", verses: 3 },
+            { number: 109, name: "الكافرون", verses: 6 },
+            { number: 110, name: "النصر", verses: 3 },
+            { number: 111, name: "المسد", verses: 5 },
+            { number: 112, name: "الإخلاص", verses: 4 },
+            { number: 113, name: "الفلق", verses: 5 },
+            { number: 114, name: "الناس", verses: 6 }
+        ];
+
+        // Theme handling
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+
+        // Load saved theme or default to dark
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        // Populate surahs
+        const surahSelect = document.getElementById('surah');
+        surahs.forEach(surah => {
+            const option = document.createElement('option');
+            option.value = surah.number;
+            option.textContent = `${surah.number}. ${surah.name}`;
+            option.dataset.verses = surah.verses;
+            surahSelect.appendChild(option);
+        });
+
+        surahSelect.addEventListener('change', function () {
+            const selectedOption = this.options[this.selectedIndex];
+            const maxVerses = parseInt(selectedOption.dataset.verses) || 1;
+            const ayahFrom = document.getElementById('ayahFrom');
+            const ayahTo = document.getElementById('ayahTo');
+            const fullSurahCheckbox = document.getElementById('fullSurah');
+
+            ayahFrom.max = maxVerses;
+            ayahTo.max = maxVerses;
+
+            if (fullSurahCheckbox.checked) {
+                ayahFrom.value = 1;
+                ayahTo.value = maxVerses;
+            } else {
+                ayahFrom.value = '';
+                ayahTo.value = '';
+            }
+        });
+
+        // Full Surah checkbox handler
+        const fullSurahCheckbox = document.getElementById('fullSurah');
+        const ayahRangeGroup = document.getElementById('ayahRangeGroup');
+
+        fullSurahCheckbox.addEventListener('change', function () {
+            const surahSelect = document.getElementById('surah');
+            const selectedOption = surahSelect.options[surahSelect.selectedIndex];
+            const ayahFrom = document.getElementById('ayahFrom');
+            const ayahTo = document.getElementById('ayahTo');
+
+            if (this.checked) {
+                ayahRangeGroup.classList.add('disabled');
+                ayahFrom.removeAttribute('required');
+                ayahTo.removeAttribute('required');
+
+                if (selectedOption && selectedOption.dataset.verses) {
+                    const maxVerses = parseInt(selectedOption.dataset.verses);
+                    ayahFrom.value = 1;
+                    ayahTo.value = maxVerses;
+                }
+            } else {
+                ayahRangeGroup.classList.remove('disabled');
+                ayahFrom.setAttribute('required', '');
+                ayahTo.setAttribute('required', '');
+                ayahFrom.value = '';
+                ayahTo.value = '';
+            }
+        });
+
+        // Ayah range validation
+        document.getElementById('ayahFrom').addEventListener('change', function () {
+            const ayahTo = document.getElementById('ayahTo');
+            const fromVal = parseInt(this.value) || 1;
+            const toVal = parseInt(ayahTo.value) || fromVal;
+
+            // Auto-correct if from > to
+            if (toVal < fromVal) {
+                ayahTo.value = fromVal;
+            }
+
+            // Ensure minimum value
+            if (fromVal < 1) this.value = 1;
+        });
+
+        document.getElementById('ayahTo').addEventListener('change', function () {
+            const ayahFrom = document.getElementById('ayahFrom');
+            const fromVal = parseInt(ayahFrom.value) || 1;
+            const toVal = parseInt(this.value) || fromVal;
+
+            // Auto-correct if to < from
+            if (toVal < fromVal) {
+                this.value = fromVal;
+            }
+
+            // Ensure minimum value
+            if (toVal < 1) this.value = 1;
+        });
+
+        // Progress messages
+        const progressMessages = [
+            'جاري تحميل الصوت...',
+            'جاري تحضير الخلفية...',
+            'جاري عرض الآية...',
+            'جاري التجهيز النهائي...'
+        ];
+
+        document.getElementById('videoForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const reciter = document.getElementById('reciter').value;
+            const surah = document.getElementById('surah').value;
+            const ayahFrom = parseInt(document.getElementById('ayahFrom').value);
+            const ayahTo = parseInt(document.getElementById('ayahTo').value);
+
+            if (ayahFrom > ayahTo) {
+                showStatus('error', '⚠️ رقم الآية الأولى يجب أن يكون أصغر من أو يساوي رقم الآية الأخيرة');
+                return;
+            }
+
+            const numAyahs = ayahTo - ayahFrom + 1;
+            if (numAyahs > 5) {
+                const confirm = window.confirm(`ستقوم بإنشاء ${numAyahs} آية. هذا قد يستغرق عدة دقائق. هل تريد المتابعة؟`);
+                if (!confirm) return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressStatus = document.getElementById('progressStatus');
+            const quranVerse = document.getElementById('quranVerse');
+            const downloadLink = document.getElementById('downloadLink');
+
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<span class="spinner"></span> جاري الإنشاء...';
+            progressContainer.style.display = 'block';
+            downloadLink.style.display = 'none';
+
+            // Show Quran verse
+            setTimeout(() => quranVerse.classList.add('visible'), 500);
+
+            showStatus('loading', `جاري إنشاء ريل بـ ${numAyahs} آية...`);
+
+            let currentProgress = 0;
+            let messageIndex = 0;
+
+            const progressInterval = setInterval(() => {
+                if (currentProgress < 90) {
+                    currentProgress += 2;
+                    progressFill.style.width = currentProgress + '%';
+
+                    // Rotate progress messages
+                    if (currentProgress % 20 === 0) {
+                        progressStatus.textContent = progressMessages[messageIndex % progressMessages.length];
+                        messageIndex++;
+                    }
+                }
+            }, 1500);
+
+            try {
+                const response = await fetch('http://localhost:5000/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reciter: reciter,
+                        surah: parseInt(surah),
+                        ayah_from: ayahFrom,
+                        ayah_to: ayahTo
+                    })
+                });
+
+                const data = await response.json();
+                clearInterval(progressInterval);
+
+                if (response.ok) {
+                    progressFill.style.width = '100%';
+                    progressStatus.textContent = 'تم بنجاح!';
+                    showStatus('success', '✅ تم إنشاء الريل بنجاح!');
+                    downloadLink.innerHTML = `<a href="${data.video_url}" download>📥 تحميل الفيديو</a>`;
+                    downloadLink.style.display = 'block';
+                } else {
+                    showStatus('error', '❌ ' + (data.error || 'حدث خطأ'));
+                }
+            } catch (error) {
+                clearInterval(progressInterval);
+                showStatus('error', '❌ فشل الاتصال: ' + error.message);
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '🎬 إنشاء الريل';
+                quranVerse.classList.remove('visible');
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                    progressFill.style.width = '0%';
+                }, 3000);
+            }
+        });
+
+        function showStatus(type, message) {
+            const status = document.getElementById('status');
+            status.className = 'status ' + type + ' fade-in';
+            status.textContent = message;
+            status.style.display = 'block';
+        }
+    </script>
+</body>
+
+</html>
