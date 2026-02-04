@@ -3,3 +3,5 @@ flask-cors
 pillow
 pydub
 python-bidi
+requests
+arabic-reshaper

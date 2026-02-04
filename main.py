@@ -519,20 +519,33 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     # Exact Face Name from verify step
     font_face_name = "KFGQPC Uthman Taha Naskh" 
     
-    # 3. Dynamic Font Sizing (Heuristic + Constraints)
-    # We let GDI handle wrapping, so we just need a size that fits.
-    # Heuristic: shorter text = bigger font.
-    # Text length: 
-    #   < 50 chars: size 140
-    #   < 100 char: size 100
-    #   < 200 char: size 80
+    # Dynamic Font Sizing (Iterative Fit)
+    max_font_size = 150
+    min_font_size = 50
+    current_font_size = max_font_size
     
-    input_len = len(text)
-    if input_len < 40: font_size = 140
-    elif input_len < 80: font_size = 110
-    elif input_len < 120: font_size = 90
-    else: font_size = 70
+    print(f"  Calculating optimal font size for {len(text)} chars...")
     
+    while current_font_size >= min_font_size:
+        # Measure height given the fixed width
+        measured_height = windows_renderer.measure_text_height(
+            text, 
+            font_face_name, 
+            current_font_size, 
+            max_width
+        )
+        
+        # Check if fits nicely
+        if measured_height <= max_height:
+            print(f"  [FIT] Size {current_font_size} -> Height {measured_height}px (Max {max_height}px)")
+            font_size = current_font_size
+            break
+        
+        current_font_size -= 5
+    else:
+        print(f"  [WARN] Text too long, using minimum size {min_font_size}")
+        font_size = min_font_size
+
     # Render using Windows GDI
     print(f"[RENDER] using Windows GDI Native Engine. Size: {font_size}")
     
@@ -910,6 +923,16 @@ def validate_audio():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+import webbrowser
+import threading
+
+def open_browser():
+    """Open the browser automatically"""
+    try:
+        webbrowser.open('http://localhost:5000')
+    except:
+        pass
 
 if __name__ == '__main__':
     print("\n" + "="*70)

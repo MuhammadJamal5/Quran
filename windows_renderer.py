@@ -103,7 +103,7 @@ def render_text_to_image(text, font_name, font_size, width, height, text_color=(
     hfont = gdi32.CreateFontW(
         lfHeight, 0, 0, 0, 
         FW_NORMAL, 0, 0, 0, 
-        ARABIC_CHARSET, 
+        DEFAULT_CHARSET, 
         OUT_TT_PRECIS, 
         CLIP_DEFAULT_PRECIS, 
         ANTIALIASED_QUALITY, 
@@ -194,14 +194,61 @@ def render_text_to_image(text, font_name, font_size, width, height, text_color=(
     
     return final_img
 
+    return final_img
+
+def measure_text_height(text, font_name, font_size, width):
+    """
+    Measure the height of the text for a given width and font size.
+    Returns the calculated height in pixels.
+    """
+    # 1. Create Device Contexts
+    hwin = user32.GetDesktopWindow()
+    hdc_screen = user32.GetDC(hwin)
+    hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
+    
+    # 2. Create Font
+    lfHeight = -int(font_size)
+    
+    hfont = gdi32.CreateFontW(
+        lfHeight, 0, 0, 0, 
+        FW_NORMAL, 0, 0, 0, 
+        DEFAULT_CHARSET, # Changed from ARABIC_CHARSET
+        OUT_TT_PRECIS, 
+        CLIP_DEFAULT_PRECIS, 
+        ANTIALIASED_QUALITY, 
+        DEFAULT_PITCH | FF_DONTCARE, 
+        font_name
+    )
+    
+    old_font = gdi32.SelectObject(hdc_mem, hfont)
+    
+    # 3. Measure
+    rect = wintypes.RECT(0, 0, width, 0) # Height ignored for calculation usually, but we need meaningful width
+    flags_base = DT_CENTER | DT_WORDBREAK | DT_RTLREADING | DT_NOPREFIX | 0x00000400 # DT_CALCRECT
+    
+    user32.DrawTextW(hdc_mem, text, -1, ctypes.byref(rect), flags_base)
+    
+    measured_height = rect.bottom - rect.top
+    
+    # 4. Cleanup
+    gdi32.SelectObject(hdc_mem, old_font)
+    gdi32.DeleteObject(hfont)
+    gdi32.DeleteDC(hdc_mem)
+    user32.ReleaseDC(hwin, hdc_screen)
+    
+    return measured_height
+
 if __name__ == "__main__":
     # Self test
     font_path = r"c:\Quran\fonts\UthmanTNB_v2-0.ttf"
     if load_private_font(font_path):
         print("Font loaded")
         text = "بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ"
-        img = render_text_to_image(text, "Uthman TNB v2", 100, 800, 300)
+        img = render_text_to_image(text, "KFGQPC Uthman Taha Naskh", 100, 800, 300)
         img.save("test_gdi.png")
         print("Saved test_gdi.png")
+        
+        h = measure_text_height(text, "KFGQPC Uthman Taha Naskh", 100, 800)
+        print(f"Measured Height: {h}")
     else:
         print("Failed load font")
