@@ -1,7 +1,9 @@
 flask
-flask-cors
+flask_cors
+requests
+moviepy
 pillow
 pydub
-python-bidi
-requests
-arabic-reshaper
+numpy
+pyaudioop
+colorama

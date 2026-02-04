@@ -10,6 +10,8 @@ from pydub import AudioSegment
 import time
 import random
 import hashlib
+import concurrent.futures
+import shutil
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +25,23 @@ BACKGROUNDS_DIR = BASE_DIR / 'backgrounds'
 
 for dir_path in [AUDIO_DIR, OUTPUT_DIR, FONTS_DIR, TEMP_DIR, BACKGROUNDS_DIR]:
     dir_path.mkdir(exist_ok=True)
+
+# Hardware Acceleration Check
+def check_nvenc_availability():
+    """Check if NVIDIA GPU encoding is available"""
+    try:
+        # Run a dummy ffmpeg command to check encoders
+        result = subprocess.run(['ffmpeg', '-encoders'], capture_output=True, text=True)
+        if 'h264_nvenc' in result.stdout:
+            print("🚀 NVIDIA GPU Acceleration Detected (h264_nvenc)!")
+            return True
+        print("⚠️ NVIDIA GPU not found, using CPU encoding (slower).")
+        return False
+    except Exception:
+        return False
+
+GPU_AVAILABLE = check_nvenc_availability()
+MAX_WORKERS = 3 if GPU_AVAILABLE else 2 # Limit parallelism based on HW
 
 RECITER_MAPPING = {
     "abdulbasit_murattal": "Abdul_Basit_Murattal_64kbps",
@@ -577,31 +596,50 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
 def prepare_background_segment(bg_video, duration, start_offset=0):
     """
     Prepare background segment: loop if needed, trim to duration, apply dark overlay
+    Supports GPU acceleration if available.
     """
-    output_path = TEMP_DIR / f"bg_prepared_{int(time.time())}.mp4"
+    output_path = TEMP_DIR / f"bg_prepared_{int(time.time())}_{random.randint(1000,9999)}.mp4" # Unique name for parallelism
     
+    # Encoder settings
+    video_codec = 'h264_nvenc' if GPU_AVAILABLE else 'libx264'
+    preset = 'p4' if GPU_AVAILABLE else 'ultrafast' # p1-p7 for nvenc
+    
+    # Filter chain
+    # Note: GPU scaling (scale_cuda) would require full CUDA pipeline, sticking to CPU filters for compatibility
+    # unless we are sure input format is compatible. To be safe, we use software filters with NVENC encoding.
+    filters = [
+        f'scale=1080:1920:force_original_aspect_ratio=increase',
+        f'crop=1080:1920',
+        f'eq=brightness=-0.15:contrast=1.1',
+        f'gblur=sigma=1.5'
+    ]
+    filter_graph = ','.join(filters)
+
     cmd = [
         'ffmpeg', '-y',
         '-stream_loop', '-1',
         '-i', bg_video,
-        '-vf',
-        f'scale=1080:1920:force_original_aspect_ratio=increase,'
-        f'crop=1080:1920,'
-        f'eq=brightness=-0.15:contrast=1.1,'
-        f'gblur=sigma=1.5',
+        '-vf', filter_graph,
         '-t', str(duration),
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '28',
-        '-pix_fmt', 'yuv420p',
-        '-r', '24',
-        '-an',
-        str(output_path)
+        '-c:v', video_codec,
+        '-preset', preset,
     ]
     
+    if GPU_AVAILABLE:
+        cmd.extend(['-rc', 'vbr', '-cq', '26']) # NVENC rate control
+    else:
+        cmd.extend(['-crf', '28']) # x264 rate control
+        
+    cmd.extend([
+        '-pix_fmt', 'yuv420p',
+        '-r', '30', # Standardization
+        '-an',
+        str(output_path)
+    ])
+    
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=60)
-        print(f"✓ Background prepared ({duration:.1f}s)")
+        subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+        # print(f"✓ Background prepared ({duration:.1f}s)") 
         return str(output_path)
     except Exception as e:
         print(f"✗ Background preparation failed: {e}")
@@ -609,9 +647,17 @@ def prepare_background_segment(bg_video, duration, start_offset=0):
 
 def create_final_reel(bg_video, text_overlay, audio_path, output_path):
     """
-    Create final reel: overlay text on background with audio
+    Create final reel: overlay text on background with audio.
+    Supports GPU acceleration and Fade Transitions.
     """
     duration = get_audio_duration(audio_path)
+    
+    video_codec = 'h264_nvenc' if GPU_AVAILABLE else 'libx264'
+    preset = 'p4' if GPU_AVAILABLE else 'ultrafast'
+    
+    # Calculate fade times
+    fade_in_duration = 0.5
+    fade_out_start = max(0, duration - 0.5)
     
     cmd = [
         'ffmpeg', '-y',
@@ -620,24 +666,32 @@ def create_final_reel(bg_video, text_overlay, audio_path, output_path):
         '-i', text_overlay,
         '-i', audio_path,
         '-filter_complex',
-        '[0:v][1:v]overlay=(W-w)/2:(H-h)/2[v]',
+        f'[0:v][1:v]overlay=(W-w)/2:(H-h)/2[base];'
+        f'[base]fade=t=in:st=0:d={fade_in_duration},fade=t=out:st={fade_out_start}:d={fade_in_duration}[v]',
         '-map', '[v]',
         '-map', '2:a',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '26',
+        '-c:v', video_codec,
+        '-preset', preset,
+    ]
+
+    if GPU_AVAILABLE:
+        cmd.extend(['-rc', 'vbr', '-cq', '26'])
+    else:
+        cmd.extend(['-crf', '26'])
+        
+    cmd.extend([
         '-c:a', 'aac',
         '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
-        '-r', '24',
+        '-r', '30',
         '-t', str(duration),
         '-movflags', '+faststart',
         output_path
-    ]
+    ])
     
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=120)
-        print(f"✓ Final reel created")
+        # print(f"✓ Final reel created")
         return True
     except Exception as e:
         print(f"✗ Reel creation failed: {e}")
@@ -808,29 +862,68 @@ def generate_video():
         if not bg_videos:
              return jsonify({'error': 'Failed to source background videos'}), 500
              
-        # [STEP 5] Create Individual Clips
-        update_progress(85, "Rendering video clips...")
-        print("\n[STEP 5/6] Creating Reel Segments...")
+        # [STEP 5] Create Individual Clips (PARALLEL)
+        update_progress(85, "Rendering video clips (Parallel)...")
+        print("\n[STEP 5/6] Creating Reel Segments with Parallel Processing...")
         
-        clips = []
-        for i, item in enumerate(audio_data):
-            bg_video = bg_videos[i]
+        def render_clip_task(args):
+            i, item, bg_video = args
             audio_path = item['audio']
             text_overlay = item['text_img']
             duration = item['duration']
             
-            clip_output = TEMP_DIR / f"clip_{i}_{int(time.time())}.mp4"
+            # Use unique temp name
+            clip_name = f"clip_{i}_{random.randint(10000,99999)}.mp4"
+            clip_output = TEMP_DIR / clip_name
+            
+            print(f"  [Task {i+1}] Processing...")
             
             # Prepare background
-            print(f"  Rendering clip {i+1}/{len(audio_data)}...")
             bg_ready = prepare_background_segment(bg_video, duration)
             if not bg_ready:
-                print(f"  Skipping clip {i+1}: Background failed")
-                continue
+                print(f"  [Task {i+1}] Failed background")
+                return None
                 
             # Create clip
             if create_final_reel(bg_ready, text_overlay, audio_path, str(clip_output)):
-                clips.append(str(clip_output))
+                print(f"  [Task {i+1}] Complete")
+                # Cleanup intermediate background
+                try: os.remove(bg_ready) 
+                except: pass
+                return str(clip_output)
+            
+            return None
+
+        # Prepare tasks
+        tasks = []
+        for i, item in enumerate(audio_data):
+            tasks.append((i, item, bg_videos[i]))
+            
+        # Execute in parallel
+        clips = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            # Future mapping
+            future_to_clip = {executor.submit(render_clip_task, t): t for t in tasks}
+            
+            # Sort results by index to maintain Ayah order
+            results = {} # index -> path
+            
+            for future in concurrent.futures.as_completed(future_to_clip):
+                task_args = future_to_clip[future]
+                idx = task_args[0]
+                try:
+                    result_path = future.result()
+                    if result_path:
+                        results[idx] = result_path
+                except Exception as exc:
+                    print(f'  [Task {idx+1}] generated an exception: {exc}')
+                    
+            # Reassemble sequentially
+            for i in range(len(audio_data)):
+                if i in results:
+                    clips.append(results[i])
+                else:
+                    print(f"  Warning: Clip {i+1} failed to render.")
                 
         # [STEP 6] Concatenate
         update_progress(95, "Stitching final reel...")
