@@ -9,3 +9,10 @@ backgrounds/
 *.mp4
 *.png
 !assets/*.png
+dist/
+build/
+*.spec
+*.zip
+ffmpeg.zip
+ffmpeg-master-latest-win64-gpl/
+Release/
