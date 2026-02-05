@@ -18,7 +18,16 @@ from threading import Timer
 app = Flask(__name__)
 CORS(app)
 
-BASE_DIR = Path(__file__).parent.parent
+import sys
+from pathlib import Path
+# ... imports ...
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys._MEIPASS)
+    TEMPLATE_DIR = '.'
+else:
+    BASE_DIR = Path(__file__).parent.parent
+    TEMPLATE_DIR = 'src'
 AUDIO_DIR = BASE_DIR / 'audio'
 OUTPUT_DIR = BASE_DIR / 'outputs'
 FONTS_DIR = BASE_DIR / 'fonts'
@@ -970,7 +979,7 @@ def download_file(filename):
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory(TEMPLATE_DIR, 'index.html')
 
 @app.route('/health')
 def health():

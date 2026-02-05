@@ -1,7 +1,13 @@
 import os
 
 # Path to the single source of truth
-QURAN_FILE = os.path.join(os.path.dirname(__file__), 'quran_text', 'quran-uthmani.txt')
+import sys
+
+# Path to the single source of truth
+if getattr(sys, 'frozen', False):
+    QURAN_FILE = os.path.join(sys._MEIPASS, 'quran_text', 'quran-uthmani.txt')
+else:
+    QURAN_FILE = os.path.join(os.path.dirname(__file__), '..', 'quran_text', 'quran-uthmani.txt')
 
 # Cache: { (sura, ayah): text }
 _QURAN_CACHE = {}
