@@ -18,7 +18,7 @@ from threading import Timer
 app = Flask(__name__)
 CORS(app)
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent
 AUDIO_DIR = BASE_DIR / 'audio'
 OUTPUT_DIR = BASE_DIR / 'outputs'
 FONTS_DIR = BASE_DIR / 'fonts'

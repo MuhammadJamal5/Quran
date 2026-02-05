@@ -23,6 +23,6 @@ echo Opening Browser...
 start http://127.0.0.1:5000
 
 echo Running Server...
-py -3.12 main.py
+py -3.12 src/main.py
 
 pause
