@@ -132,11 +132,10 @@ echo.
 :: ── Step 4: Launch ──────────────────────────────────────────────
 echo [4/4] Launching Quran Reel Generator...
 echo.
-echo  Opening browser at http://localhost:5000
+echo  The browser will open automatically when the server is ready.
 echo  (Close this window to stop the server)
 echo.
 
-start http://127.0.0.1:5000
 %PYTHON% "%~dp0src\main.py"
 
 pause

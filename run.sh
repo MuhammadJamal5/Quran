@@ -113,15 +113,8 @@ echo ""
 # ── Step 4: Launch ──────────────────────────────────────────────
 echo "[4/4] Launching Quran Reel Generator..."
 echo ""
-echo "  Opening browser at http://localhost:5000"
+echo "  The browser will open automatically when the server is ready."
 echo "  (Press Ctrl+C to stop the server)"
 echo ""
-
-# Try to open browser (non-blocking, ignore errors)
-if command -v xdg-open &>/dev/null; then
-    xdg-open http://localhost:5000 &>/dev/null &
-elif command -v open &>/dev/null; then
-    open http://localhost:5000 &>/dev/null &
-fi
 
 $PYTHON "$SCRIPT_DIR/src/main.py"

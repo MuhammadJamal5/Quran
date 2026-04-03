@@ -1046,16 +1046,21 @@ def validate_audio():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def open_browser():
-    """Open the browser automatically"""
-    try:
-        webbrowser.open('http://localhost:5000')
-    except:
-        pass
+def open_browser_when_ready(host='127.0.0.1', port=5000, timeout=30):
+    """Wait for the server to accept connections, then open the browser."""
+    import socket
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                webbrowser.open(f'http://localhost:{port}')
+                return
+        except OSError:
+            time.sleep(0.5)
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("  🎬 AUTOMATIC QURAN REELS GENERATOR")
+    print("  AUTOMATIC QURAN REELS GENERATOR")
     print("  Fully Automated | No Manual Intervention")
     print("="*70)
     print(f"  Audio cache: {AUDIO_DIR}")
@@ -1065,9 +1070,9 @@ if __name__ == '__main__':
     print("  Server: http://localhost:5000")
     print("  Health: http://localhost:5000/health")
     print("="*70 + "\n")
-    
-    # Auto-open browser after 1.5s
-    Timer(1.5, open_browser).start()
-    
+
+    # Open browser in background thread once the server is actually listening
+    Timer(0, open_browser_when_ready).start()
+
     # Disable debug for production EXE to avoid reloader issues
     app.run(debug=False, host='0.0.0.0', port=5000)
