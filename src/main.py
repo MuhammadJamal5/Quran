@@ -1,23 +1,64 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-import requests
 import os
 import sys
 import subprocess
-from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from datetime import datetime
-from pydub import AudioSegment
 import time
 import random
 import hashlib
 import concurrent.futures
 import shutil
 import webbrowser
+from pathlib import Path
+from datetime import datetime
 from threading import Timer
+
+# ── Dependency check ────────────────────────────────────────────────
+_MISSING = []
+for _mod, _pkg in [
+    ("flask", "flask"), ("flask_cors", "flask-cors"), ("requests", "requests"),
+    ("PIL", "pillow"), ("pydub", "pydub"), ("arabic_reshaper", "arabic-reshaper"),
+    ("bidi", "python-bidi"),
+]:
+    try:
+        __import__(_mod)
+    except ImportError:
+        _MISSING.append(_pkg)
+
+if _MISSING:
+    print("=" * 60)
+    print("[ERROR] Missing required packages:")
+    print(f"        {', '.join(_MISSING)}")
+    print()
+    print("  Fix:  pip install -r requirements.txt")
+    print("=" * 60)
+    sys.exit(1)
+
+# Check ffmpeg
+try:
+    subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+except (FileNotFoundError, subprocess.CalledProcessError):
+    print("=" * 60)
+    print("[ERROR] ffmpeg not found!")
+    print("  Install it:")
+    print("    Windows : https://ffmpeg.org/download.html")
+    print("    macOS   : brew install ffmpeg")
+    print("    Linux   : sudo apt install ffmpeg")
+    print("=" * 60)
+    sys.exit(1)
+# ────────────────────────────────────────────────────────────────────
+
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+import requests
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from pydub import AudioSegment
 
 app = Flask(__name__)
 CORS(app)
+
+# Ensure src/ is on the import path so sibling modules resolve from any working dir
+_SRC_DIR = str(Path(__file__).parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -348,33 +389,76 @@ def download_background_video(url, output_path):
     
     return retry_operation(download, max_retries=2)
 
+def generate_default_background():
+    """
+    Generate a simple dark animated background using FFmpeg when no video
+    files are present in backgrounds/. This lets new users run the app
+    immediately after cloning without needing to supply their own videos.
+    """
+    output_path = BACKGROUNDS_DIR / "default_dark_nature.mp4"
+    if output_path.exists() and output_path.stat().st_size > 10000:
+        return  # Already generated
+
+    print("[SETUP] No background videos found. Generating a default dark background...")
+    print("        (Place your own .mp4 files in backgrounds/ for better results)")
+
+    cmd = [
+        'ffmpeg', '-y',
+        '-f', 'lavfi',
+        '-i', 'color=c=#0a1628:s=1080x1920:d=30:r=24',
+        '-f', 'lavfi',
+        '-i', 'color=c=#1a2744:s=1080x1920:d=30:r=24',
+        '-filter_complex',
+        '[0:v][1:v]blend=all_mode=average:all_opacity=0.6,'
+        'noise=alls=8:allf=t,'
+        'vignette=PI/3',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-pix_fmt', 'yuv420p', '-r', '24',
+        str(output_path)
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        print(f"[OK] Default background generated: {output_path.name}")
+    except Exception as e:
+        print(f"[WARN] Could not generate default background: {e}")
+
+
 def get_unique_backgrounds(num_needed):
     """Get unique backgrounds for each ayah - no repetition in same reel"""
     existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
-    
+
     if not existing_backgrounds:
-        print("✗ CRITICAL: No real nature videos in backgrounds/ folder.")
-        print("✗ Aborting execution. Gradient/solid colors are FORBIDDEN.")
+        # Auto-generate a default so the app works out of the box
+        generate_default_background()
+        existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
+
+    if not existing_backgrounds:
+        print("[ERROR] No background videos available and generation failed.")
+        print("        Please place .mp4 files in the backgrounds/ folder.")
         return None
-    
+
     # Shuffle and select unique backgrounds (cycle if needed)
     random.shuffle(existing_backgrounds)
     selected = []
     for i in range(num_needed):
         selected.append(str(existing_backgrounds[i % len(existing_backgrounds)]))
-    
-    print(f"✓ Selected {num_needed} unique backgrounds from {len(existing_backgrounds)} available")
+
+    print(f"[OK] Selected {num_needed} backgrounds from {len(existing_backgrounds)} available")
     return selected
 
 def get_background_video(duration):
     """Get a single background video (legacy compatibility)"""
     existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
+    if not existing_backgrounds:
+        generate_default_background()
+        existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
+
     if existing_backgrounds:
         bg_path = random.choice(existing_backgrounds)
-        print(f"✓ Using background: {bg_path.name}")
+        print(f"[OK] Using background: {bg_path.name}")
         return str(bg_path)
-    
-    print("✗ CRITICAL: No real nature video available. Aborting.")
+
+    print("[ERROR] No background video available.")
     return None
 
 def create_gradient_background(duration):
@@ -458,10 +542,10 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     if text:
         text = " ".join(text.split())
 
-    import windows_renderer
+    import text_renderer
 
     # Ensure font is loaded (safe to call multiple times)
-    windows_renderer.load_private_font(font_path)
+    text_renderer.load_private_font(font_path)
 
     # Dynamic font sizing: find largest size that fits the canvas
     margin = 50
@@ -475,7 +559,7 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     print(f"  Calculating optimal font size for {len(text)} chars...")
 
     while current_font_size >= min_font_size:
-        measured_height = windows_renderer.measure_text_height(
+        measured_height = text_renderer.measure_text_height(
             text, font_path, current_font_size, max_width
         )
         if measured_height <= max_height:
@@ -490,7 +574,7 @@ def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     print(f"[RENDER] Cross-platform Pillow engine. Size: {font_size}")
 
     try:
-        final_img = windows_renderer.render_text_to_image(
+        final_img = text_renderer.render_text_to_image(
             text, font_path, font_size, width, height,
             text_color=(255, 255, 255)
         )
