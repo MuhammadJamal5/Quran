@@ -61,7 +61,8 @@ echo.
 echo [2/4] Checking FFmpeg...
 
 :: Persistent location that survives re-downloading the project ZIP
-set "FFMPEG_DIR=%LOCALAPPDATA%\QuranReelGenerator\ffmpeg"
+set "FFMPEG_APPDIR=%LOCALAPPDATA%\QuranReelGenerator"
+set "FFMPEG_DIR=%FFMPEG_APPDIR%\ffmpeg"
 
 where ffmpeg >nul 2>&1
 if %errorlevel% equ 0 (
@@ -70,8 +71,8 @@ if %errorlevel% equ 0 (
 )
 
 :: Check persistent local install
-if exist "%FFMPEG_DIR%\bin\ffmpeg.exe" (
-    set "PATH=%FFMPEG_DIR%\bin;%PATH%"
+if exist "%FFMPEG_DIR%\ffmpeg.exe" (
+    set "PATH=%FFMPEG_DIR%;%PATH%"
     echo  Using previously downloaded FFmpeg.
     goto :ffmpeg_ready
 )
@@ -81,45 +82,55 @@ echo  FFmpeg not found. Downloading once (will be reused on future runs)...
 echo.
 
 :: Create persistent directory
-if not exist "%LOCALAPPDATA%\QuranReelGenerator" mkdir "%LOCALAPPDATA%\QuranReelGenerator"
+if not exist "%FFMPEG_APPDIR%" mkdir "%FFMPEG_APPDIR%"
+if not exist "%FFMPEG_DIR%" mkdir "%FFMPEG_DIR%"
 
-:: Download ffmpeg using PowerShell
-set "FFMPEG_URL=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-set "FFMPEG_ZIP=%LOCALAPPDATA%\QuranReelGenerator\ffmpeg_download.zip"
+:: Download ffmpeg essentials (much smaller than full GPL build)
+set "FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+set "FFMPEG_ZIP=%FFMPEG_APPDIR%\ffmpeg_download.zip"
 
 powershell -NoProfile -Command ^
     "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " ^
-    "Write-Host '  Downloading FFmpeg (this may take a minute)...'; " ^
+    "Write-Host '  Downloading FFmpeg essentials...'; " ^
     "Invoke-WebRequest -Uri '%FFMPEG_URL%' -OutFile '%FFMPEG_ZIP%' -UseBasicParsing"
 
 if not exist "%FFMPEG_ZIP%" (
     echo.
     echo  [ERROR] FFmpeg download failed.
-    echo  Please download FFmpeg manually from: https://ffmpeg.org/download.html
+    echo  Please download FFmpeg manually from: https://www.gyan.dev/ffmpeg/builds/
+    echo  Extract ffmpeg.exe and ffprobe.exe into: %FFMPEG_DIR%
     pause
     exit /b 1
 )
 
-echo  Extracting FFmpeg...
+:: Extract ONLY the bin/ folder (ffmpeg.exe, ffprobe.exe, ffplay.exe) to save space
+echo  Extracting FFmpeg (bin only)...
 powershell -NoProfile -Command ^
-    "$tempDir = '%LOCALAPPDATA%\QuranReelGenerator\ffmpeg_temp'; " ^
-    "Expand-Archive -Path '%FFMPEG_ZIP%' -DestinationPath $tempDir -Force; " ^
-    "$extracted = Get-ChildItem $tempDir -Directory | Select-Object -First 1; " ^
-    "if ($extracted) { " ^
-    "  if (Test-Path '%FFMPEG_DIR%') { Remove-Item '%FFMPEG_DIR%' -Recurse -Force }; " ^
-    "  Move-Item $extracted.FullName '%FFMPEG_DIR%' " ^
-    "}; " ^
-    "Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue; " ^
+    "Add-Type -Assembly System.IO.Compression.FileSystem; " ^
+    "$zip = [IO.Compression.ZipFile]::OpenRead('%FFMPEG_ZIP%'); " ^
+    "try { " ^
+    "  foreach ($entry in $zip.Entries) { " ^
+    "    if ($entry.FullName -match '/bin/[^/]+\.exe$') { " ^
+    "      $name = [IO.Path]::GetFileName($entry.FullName); " ^
+    "      $dest = Join-Path '%FFMPEG_DIR%' $name; " ^
+    "      [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true); " ^
+    "      Write-Host ('  Extracted: ' + $name); " ^
+    "    } " ^
+    "  } " ^
+    "} finally { $zip.Dispose() }; " ^
     "Remove-Item '%FFMPEG_ZIP%' -Force -ErrorAction SilentlyContinue"
 
-if exist "%FFMPEG_DIR%\bin\ffmpeg.exe" (
-    set "PATH=%FFMPEG_DIR%\bin;%PATH%"
+if exist "%FFMPEG_DIR%\ffmpeg.exe" (
+    set "PATH=%FFMPEG_DIR%;%PATH%"
     echo  FFmpeg installed successfully.
     echo  (Saved to %FFMPEG_DIR% - won't download again)
 ) else (
     echo.
-    echo  [ERROR] FFmpeg extraction failed.
-    echo  Please download FFmpeg manually from: https://ffmpeg.org/download.html
+    echo  [ERROR] FFmpeg extraction failed. You may be low on disk space.
+    echo  Please download FFmpeg manually from: https://www.gyan.dev/ffmpeg/builds/
+    echo  Extract ffmpeg.exe and ffprobe.exe into: %FFMPEG_DIR%
+    :: Clean up failed download
+    del "%FFMPEG_ZIP%" >nul 2>&1
     pause
     exit /b 1
 )
