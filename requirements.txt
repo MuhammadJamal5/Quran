@@ -7,3 +7,5 @@ pydub
 numpy
 pyaudioop
 colorama
+arabic-reshaper
+python-bidi

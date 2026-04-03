@@ -1,26 +1,64 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-import requests
 import os
+import sys
 import subprocess
-from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from datetime import datetime
-from pydub import AudioSegment
 import time
 import random
 import hashlib
 import concurrent.futures
 import shutil
 import webbrowser
+from pathlib import Path
+from datetime import datetime
 from threading import Timer
+
+# ── Dependency check ────────────────────────────────────────────────
+_MISSING = []
+for _mod, _pkg in [
+    ("flask", "flask"), ("flask_cors", "flask-cors"), ("requests", "requests"),
+    ("PIL", "pillow"), ("pydub", "pydub"), ("arabic_reshaper", "arabic-reshaper"),
+    ("bidi", "python-bidi"),
+]:
+    try:
+        __import__(_mod)
+    except ImportError:
+        _MISSING.append(_pkg)
+
+if _MISSING:
+    print("=" * 60)
+    print("[ERROR] Missing required packages:")
+    print(f"        {', '.join(_MISSING)}")
+    print()
+    print("  Fix:  pip install -r requirements.txt")
+    print("=" * 60)
+    sys.exit(1)
+
+# Check ffmpeg (warn but don't exit — the launcher scripts handle installation)
+try:
+    subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+except (FileNotFoundError, subprocess.CalledProcessError):
+    print("=" * 60)
+    print("[WARNING] ffmpeg not found on PATH!")
+    print("  The launcher (Run_App.bat / run.sh) installs it automatically.")
+    print("  If you ran main.py directly, install ffmpeg first:")
+    print("    Windows : Run_App.bat (auto-installs)")
+    print("    macOS   : brew install ffmpeg")
+    print("    Linux   : sudo apt install ffmpeg")
+    print("=" * 60)
+# ────────────────────────────────────────────────────────────────────
+
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+import requests
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from pydub import AudioSegment
 
 app = Flask(__name__)
 CORS(app)
 
-import sys
-from pathlib import Path
-# ... imports ...
+# Ensure src/ is on the import path so sibling modules resolve from any working dir
+_SRC_DIR = str(Path(__file__).parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -351,33 +389,76 @@ def download_background_video(url, output_path):
     
     return retry_operation(download, max_retries=2)
 
+def generate_default_background():
+    """
+    Generate a simple dark animated background using FFmpeg when no video
+    files are present in backgrounds/. This lets new users run the app
+    immediately after cloning without needing to supply their own videos.
+    """
+    output_path = BACKGROUNDS_DIR / "default_dark_nature.mp4"
+    if output_path.exists() and output_path.stat().st_size > 10000:
+        return  # Already generated
+
+    print("[SETUP] No background videos found. Generating a default dark background...")
+    print("        (Place your own .mp4 files in backgrounds/ for better results)")
+
+    cmd = [
+        'ffmpeg', '-y',
+        '-f', 'lavfi',
+        '-i', 'color=c=#0a1628:s=1080x1920:d=30:r=24',
+        '-f', 'lavfi',
+        '-i', 'color=c=#1a2744:s=1080x1920:d=30:r=24',
+        '-filter_complex',
+        '[0:v][1:v]blend=all_mode=average:all_opacity=0.6,'
+        'noise=alls=8:allf=t,'
+        'vignette=PI/3',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-pix_fmt', 'yuv420p', '-r', '24',
+        str(output_path)
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        print(f"[OK] Default background generated: {output_path.name}")
+    except Exception as e:
+        print(f"[WARN] Could not generate default background: {e}")
+
+
 def get_unique_backgrounds(num_needed):
     """Get unique backgrounds for each ayah - no repetition in same reel"""
     existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
-    
+
     if not existing_backgrounds:
-        print("✗ CRITICAL: No real nature videos in backgrounds/ folder.")
-        print("✗ Aborting execution. Gradient/solid colors are FORBIDDEN.")
+        # Auto-generate a default so the app works out of the box
+        generate_default_background()
+        existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
+
+    if not existing_backgrounds:
+        print("[ERROR] No background videos available and generation failed.")
+        print("        Please place .mp4 files in the backgrounds/ folder.")
         return None
-    
+
     # Shuffle and select unique backgrounds (cycle if needed)
     random.shuffle(existing_backgrounds)
     selected = []
     for i in range(num_needed):
         selected.append(str(existing_backgrounds[i % len(existing_backgrounds)]))
-    
-    print(f"✓ Selected {num_needed} unique backgrounds from {len(existing_backgrounds)} available")
+
+    print(f"[OK] Selected {num_needed} backgrounds from {len(existing_backgrounds)} available")
     return selected
 
 def get_background_video(duration):
     """Get a single background video (legacy compatibility)"""
     existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
+    if not existing_backgrounds:
+        generate_default_background()
+        existing_backgrounds = list(BACKGROUNDS_DIR.glob("*.mp4"))
+
     if existing_backgrounds:
         bg_path = random.choice(existing_backgrounds)
-        print(f"✓ Using background: {bg_path.name}")
+        print(f"[OK] Using background: {bg_path.name}")
         return str(bg_path)
-    
-    print("✗ CRITICAL: No real nature video available. Aborting.")
+
+    print("[ERROR] No background video available.")
     return None
 
 def create_gradient_background(duration):
@@ -441,163 +522,72 @@ def find_quran_font():
     print("=" * 70)
     return None
 
-def validate_quran_glyph_support(font_path, test_text):
-    """
-    Validate that the font supports all required Quran glyphs.
-    Returns True if all glyphs are supported, False otherwise.
-    """
-    try:
-        from PIL import ImageFont, Image, ImageDraw
-        font = ImageFont.truetype(font_path, 50)
-        
-        # Create test image
-        img = Image.new('RGB', (100, 100), 'white')
-        draw = ImageDraw.Draw(img)
-        
-        # Try to render the text
-        draw.text((10, 10), test_text, font=font, fill='black')
-        
-        # Check for missing glyph indicators (typically .notdef boxes)
-        # This is a basic check - more sophisticated validation could be added
-        return True
-        
-    except Exception as e:
-        print(f"⚠️ Glyph validation warning: {e}")
-        return False
-
-
-
 
 def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     """
     Create text overlay with authentic Quran rendering.
-    
-    CRITICAL CORRECTNESS REQUIREMENT:
-    - Text is rendered EXACTLY as received from Uthmani source
-    - NO reshaping, NO bidi transformation, NO preprocessing
-    - UthmanTNB font handles Arabic RTL and ligatures natively
-    - Tashkeel (diacritics) MUST remain identical to source
+
+    Uses cross-platform Pillow renderer with arabic_reshaper + python-bidi
+    for correct Arabic glyph shaping and RTL layout.
+    Tashkeel (diacritics) are preserved exactly as received from source.
     """
     print(f"Creating Quran caption overlay (preserving tashkeel)...")
-    
-    # Create transparent canvas
-    img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    
-    # Load Quran font
+
     font_path = find_quran_font()
     if not font_path:
         print("[ERROR] No Quran font found! Cannot create caption.")
         return None
-    
-    # Dynamic font size based on text length
-    text_length = len(text)
-    if font_size is None:
-        if text_length > 200:
-            font_size = 85
-        elif text_length > 100:
-            font_size = 100
-        elif text_length > 50:
-            font_size = 120
-        else:
-            font_size = 140
-    
-    try:
-        font = ImageFont.truetype(font_path, font_size)
-        print(f"[OK] Using font: {os.path.basename(font_path)} (size: {font_size})")
-    except Exception as e:
-        print(f"[ERROR] Font loading failed: {e}")
-        return None
-    
-    # Safe margins to prevent edge clipping
-    margin = 100
-    max_width = width - (margin * 2)
-    
-    # Safe margins
-    margin = 50 
-    max_width = width - (margin * 2)
-    max_height = height - (margin * 2)
-    
-    # Sanitize Text: Collapse specific whitespace but NEVER touch Tashkeel
+
+    # Sanitize whitespace but NEVER touch tashkeel
     if text:
         text = " ".join(text.split())
-    
-    # Text Processing: GDI handles shaping. We just pass the Uthmani text.
-    # Font Logic: Use GDI renderer
-    import windows_renderer
-    
-    font_path = find_quran_font()
-    if not font_path:
-        return None
-        
-    # Load into GDI (safe to call multiple times)
-    windows_renderer.load_private_font(font_path)
-    # Exact Face Name from verify step
-    font_face_name = "Amiri" 
-    
-    # Dynamic Font Sizing (Iterative Fit)
-    max_font_size = 120 # Reduced from 150 as requested
+
+    import text_renderer
+
+    # Ensure font is loaded (safe to call multiple times)
+    text_renderer.load_private_font(font_path)
+
+    # Dynamic font sizing: find largest size that fits the canvas
+    margin = 50
+    max_width = width - (margin * 2)
+    max_height = height - (margin * 2)
+
+    max_font_size = 120
     min_font_size = 40
     current_font_size = max_font_size
-    
+
     print(f"  Calculating optimal font size for {len(text)} chars...")
-    
+
     while current_font_size >= min_font_size:
-        # Measure height given the fixed width
-        measured_height = windows_renderer.measure_text_height(
-            text, 
-            font_face_name, 
-            current_font_size, 
-            max_width
+        measured_height = text_renderer.measure_text_height(
+            text, font_path, current_font_size, max_width
         )
-        
-        # Check if fits nicely
         if measured_height <= max_height:
             print(f"  [FIT] Size {current_font_size} -> Height {measured_height}px (Max {max_height}px)")
             font_size = current_font_size
             break
-        
         current_font_size -= 5
     else:
         print(f"  [WARN] Text too long, using minimum size {min_font_size}")
         font_size = min_font_size
 
-    # Render using Windows GDI
-    print(f"[RENDER] using Windows GDI Native Engine. Size: {font_size}")
-    
+    print(f"[RENDER] Cross-platform Pillow engine. Size: {font_size}")
+
     try:
-        final_img = windows_renderer.render_text_to_image(
-            text, 
-            font_face_name, 
-            font_size, 
-            width, 
-            height,
-            text_color=(255, 255, 255) # White
+        final_img = text_renderer.render_text_to_image(
+            text, font_path, font_size, width, height,
+            text_color=(255, 255, 255)
         )
-        
-        # Add a Stroke? GDI path is hard.
-        # But we can simulate stroke in PIL using the output image alpha?
-        # Or just rely on shadow (GDI render supports shadow if we draw twice).
-        # Our renderer creates white text.
-        # Let's add stroke/shadow using basic image processing if needed.
-        # For now, clean white text is better than broken text.
-        # We can add a simple Drop Shadow by rendering black text first?
-        # windows_renderer creates a single image.
-        
-        # Better: Draw Stroke in PIL using the alpha channel from GDI result.
-        # Or just keep it clean. User asked for "Optional stroke".
-        # Let's add a Drop Shadow using image offset.
-        
-        # Save
+
         filename = f"text_{abs(hash(text))}_{random.randint(1000,9999)}.png"
         filepath = TEMP_DIR / filename
         final_img.save(filepath, "PNG")
-        
-        print(f"[OK] GDI Caption generated: {filename}")
+
+        print(f"[OK] Caption generated: {filename}")
         return str(filepath)
-        
+
     except Exception as e:
-        print(f"[ERROR] GDI Render failed: {e}")
+        print(f"[ERROR] Render failed: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -1056,19 +1046,21 @@ def validate_audio():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-import webbrowser
-import threading
-
-def open_browser():
-    """Open the browser automatically"""
-    try:
-        webbrowser.open('http://localhost:5000')
-    except:
-        pass
+def open_browser_when_ready(host='127.0.0.1', port=5000, timeout=30):
+    """Wait for the server to accept connections, then open the browser."""
+    import socket
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                webbrowser.open(f'http://localhost:{port}')
+                return
+        except OSError:
+            time.sleep(0.5)
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("  🎬 AUTOMATIC QURAN REELS GENERATOR")
+    print("  AUTOMATIC QURAN REELS GENERATOR")
     print("  Fully Automated | No Manual Intervention")
     print("="*70)
     print(f"  Audio cache: {AUDIO_DIR}")
@@ -1078,9 +1070,9 @@ if __name__ == '__main__':
     print("  Server: http://localhost:5000")
     print("  Health: http://localhost:5000/health")
     print("="*70 + "\n")
-    
-    # Auto-open browser after 1.5s
-    Timer(1.5, open_browser).start()
-    
+
+    # Open browser in background thread once the server is actually listening
+    Timer(0, open_browser_when_ready).start()
+
     # Disable debug for production EXE to avoid reloader issues
     app.run(debug=False, host='0.0.0.0', port=5000)

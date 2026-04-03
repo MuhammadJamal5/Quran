@@ -3,26 +3,139 @@ title Quran Reel Generator
 color 0b
 
 echo =================================================
-echo   Quran Reel Generator (Python 3.12 Edition)
+echo   Quran Reel Generator - One-Click Setup
 echo =================================================
 echo.
 
-echo [1/2] Checking Dependencies (using 3.12)...
-py -3.12 -m pip install -r requirements.txt >nul 2>&1
-if %errorlevel% neq 0 (
-    echo.
-    echo [WARNING] Could not install requirements. 
-    echo Make sure Python 3.12 is installed.
-    echo Trying to run anyway...
+:: ── Step 1: Find or Install Python ──────────────────────────────
+echo [1/4] Checking Python...
+
+set PYTHON=
+where py >nul 2>&1
+if %errorlevel% equ 0 (
+    set PYTHON=py -3
+    goto :found_python
+)
+where python >nul 2>&1
+if %errorlevel% equ 0 (
+    set PYTHON=python
+    goto :found_python
 )
 
 echo.
-echo [2/2] Launching Application...
+echo  Python is not installed. Attempting automatic install...
 echo.
-echo Opening Browser...
-start http://127.0.0.1:5000
 
-echo Running Server...
-py -3.12 src/main.py
+:: Try winget first (Windows 10 1709+ / Windows 11)
+where winget >nul 2>&1
+if %errorlevel% equ 0 (
+    echo  Installing Python via winget...
+    winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
+    if %errorlevel% equ 0 (
+        echo.
+        echo  Python installed! Restarting setup...
+        echo  Please close this window and double-click Run_App.bat again.
+        pause
+        exit /b 0
+    )
+)
+
+echo.
+echo ====================================================
+echo  [ERROR] Could not install Python automatically.
+echo.
+echo  Please download Python from:
+echo    https://www.python.org/downloads/
+echo.
+echo  IMPORTANT: Check "Add Python to PATH" during install!
+echo ====================================================
+echo.
+pause
+exit /b 1
+
+:found_python
+%PYTHON% --version
+echo.
+
+:: ── Step 2: Install FFmpeg ──────────────────────────────────────
+echo [2/4] Checking FFmpeg...
+
+where ffmpeg >nul 2>&1
+if %errorlevel% equ 0 (
+    echo  FFmpeg found.
+    goto :ffmpeg_ready
+)
+
+:: Check if we already downloaded it locally
+if exist "%~dp0ffmpeg\bin\ffmpeg.exe" (
+    set "PATH=%~dp0ffmpeg\bin;%PATH%"
+    echo  Using local FFmpeg.
+    goto :ffmpeg_ready
+)
+
+echo.
+echo  FFmpeg not found. Downloading automatically...
+echo.
+
+:: Download ffmpeg using PowerShell
+set "FFMPEG_URL=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+set "FFMPEG_ZIP=%~dp0ffmpeg_download.zip"
+set "FFMPEG_DIR=%~dp0ffmpeg"
+
+powershell -NoProfile -Command ^
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " ^
+    "Write-Host '  Downloading FFmpeg (this may take a minute)...'; " ^
+    "Invoke-WebRequest -Uri '%FFMPEG_URL%' -OutFile '%FFMPEG_ZIP%' -UseBasicParsing"
+
+if not exist "%FFMPEG_ZIP%" (
+    echo.
+    echo  [ERROR] FFmpeg download failed.
+    echo  Please download FFmpeg manually from: https://ffmpeg.org/download.html
+    pause
+    exit /b 1
+)
+
+echo  Extracting FFmpeg...
+powershell -NoProfile -Command ^
+    "Expand-Archive -Path '%FFMPEG_ZIP%' -DestinationPath '%~dp0ffmpeg_temp' -Force; " ^
+    "$extracted = Get-ChildItem '%~dp0ffmpeg_temp' -Directory | Select-Object -First 1; " ^
+    "if ($extracted) { " ^
+    "  if (Test-Path '%FFMPEG_DIR%') { Remove-Item '%FFMPEG_DIR%' -Recurse -Force }; " ^
+    "  Move-Item $extracted.FullName '%FFMPEG_DIR%' " ^
+    "}; " ^
+    "Remove-Item '%~dp0ffmpeg_temp' -Recurse -Force -ErrorAction SilentlyContinue; " ^
+    "Remove-Item '%FFMPEG_ZIP%' -Force -ErrorAction SilentlyContinue"
+
+if exist "%FFMPEG_DIR%\bin\ffmpeg.exe" (
+    set "PATH=%FFMPEG_DIR%\bin;%PATH%"
+    echo  FFmpeg installed successfully.
+) else (
+    echo.
+    echo  [ERROR] FFmpeg extraction failed.
+    echo  Please download FFmpeg manually from: https://ffmpeg.org/download.html
+    pause
+    exit /b 1
+)
+
+:ffmpeg_ready
+echo.
+
+:: ── Step 3: Install Python Dependencies ─────────────────────────
+echo [3/4] Installing Python dependencies...
+%PYTHON% -m pip install -r "%~dp0requirements.txt" --quiet
+if %errorlevel% neq 0 (
+    echo  [WARNING] Some packages may have failed. Trying to run anyway...
+)
+echo  Dependencies ready.
+echo.
+
+:: ── Step 4: Launch ──────────────────────────────────────────────
+echo [4/4] Launching Quran Reel Generator...
+echo.
+echo  The browser will open automatically when the server is ready.
+echo  (Close this window to stop the server)
+echo.
+
+%PYTHON% "%~dp0src\main.py"
 
 pause
