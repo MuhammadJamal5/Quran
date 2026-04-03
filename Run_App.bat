@@ -122,9 +122,14 @@ echo.
 
 :: ── Step 3: Install Python Dependencies ─────────────────────────
 echo [3/4] Installing Python dependencies...
-%PYTHON% -m pip install -r "%~dp0requirements.txt" --quiet
+%PYTHON% -m pip install --upgrade pip >nul 2>&1
+%PYTHON% -m pip install -r "%~dp0requirements.txt"
 if %errorlevel% neq 0 (
-    echo  [WARNING] Some packages may have failed. Trying to run anyway...
+    echo.
+    echo  [WARNING] Some packages failed. Installing one by one...
+    for /f "usebackq delims=" %%p in ("%~dp0requirements.txt") do (
+        %PYTHON% -m pip install %%p
+    )
 )
 echo  Dependencies ready.
 echo.
