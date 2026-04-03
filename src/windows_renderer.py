@@ -1,255 +1,192 @@
+"""
+Cross-platform Quran text renderer using Pillow with Arabic reshaping.
 
-import ctypes
-from ctypes import wintypes
-import struct
-from PIL import Image
+Replaces the previous Windows-only GDI renderer with a portable solution
+that uses arabic_reshaper + python-bidi for correct Arabic glyph shaping
+and Pillow for rendering.
+"""
 
-# Windows GDI Constants
-FR_PRIVATE = 0x10
-FR_NOT_ENUM = 0x20
+from PIL import Image, ImageDraw, ImageFont
+import arabic_reshaper
+from bidi.algorithm import get_display
 
-FW_NORMAL = 400
-FW_BOLD = 700
+# Cache loaded fonts to avoid repeated disk reads
+_font_cache = {}
 
-ANSI_CHARSET = 0
-DEFAULT_CHARSET = 1
-ARABIC_CHARSET = 178
-
-OUT_DEFAULT_PRECIS = 0
-OUT_TT_PRECIS = 4
-
-CLIP_DEFAULT_PRECIS = 0
-
-DEFAULT_QUALITY = 0
-ANTIALIASED_QUALITY = 4
-CLEARTYPE_QUALITY = 5
-
-DEFAULT_PITCH = 0
-FF_DONTCARE = 0
-
-DT_CENTER = 0x00000001
-DT_VCENTER = 0x00000004
-DT_WORDBREAK = 0x00000010
-DT_NOCLIP = 0x00000100
-DT_RTLREADING = 0x00020000  # Important for Arabic
-DT_NOPREFIX = 0x00000800
-
-TRANSPARENT = 1
-OPAQUE = 2
-
-SRCCOPY = 0x00CC0020
-
-# Structures
-class BITMAPINFOHEADER(ctypes.Structure):
-    _fields_ = [
-        ("biSize", wintypes.DWORD),
-        ("biWidth", wintypes.LONG),
-        ("biHeight", wintypes.LONG),
-        ("biPlanes", wintypes.WORD),
-        ("biBitCount", wintypes.WORD),
-        ("biCompression", wintypes.DWORD),
-        ("biSizeImage", wintypes.DWORD),
-        ("biXPelsPerMeter", wintypes.LONG),
-        ("biYPelsPerMeter", wintypes.LONG),
-        ("biClrUsed", wintypes.DWORD),
-        ("biClrImportant", wintypes.DWORD),
-    ]
-
-class BITMAPINFO(ctypes.Structure):
-    _fields_ = [
-        ("bmiHeader", BITMAPINFOHEADER),
-        ("bmiColors", wintypes.DWORD * 3),
-    ]
-
-# Libraries
-gdi32 = ctypes.windll.gdi32
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
 
 def load_private_font(font_path):
-    """Load a font file privately for this process."""
+    """
+    Load a font file for later use.
+    With Pillow this is a no-op since truetype() loads on demand,
+    but we keep the interface for compatibility.
+    """
     if not isinstance(font_path, str):
         font_path = str(font_path)
-    
-    # AddFontResourceExW returns number of fonts added
-    ret = gdi32.AddFontResourceExW(font_path, FR_PRIVATE | FR_NOT_ENUM, 0)
-    if ret == 0:
-        print(f"[ERROR] AddFontResourceEx failed for {font_path}")
-        return False
-    return True
-
-def render_text_to_image(text, font_name, font_size, width, height, text_color=(255, 255, 255)):
-    """
-    Render text using Windows GDI to a PIL Image.
-    This handles complex scripts (Arabic) natively with correct shaping and GPOS.
-    """
-    print(f"[DEBUG] GDI Render: Font='{font_name}', Charset=178, Quality=ClearType")
-    
-    # 1. Create Device Contexts
-    hwin = user32.GetDesktopWindow()
-    hdc_screen = user32.GetDC(hwin)
-    hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
-    
-    # 2. Create Bitmap
-    hbitmap = gdi32.CreateCompatibleBitmap(hdc_screen, width, height)
-    old_bitmap = gdi32.SelectObject(hdc_mem, hbitmap)
-    
-    # 3. Create Font
-    # Height = -MulDiv(PointSize, GetDeviceCaps(hDC, LOGPIXELSY), 72)
-    # Approx: height in pixels
-    
-    # Note: UthmanTNB might need large size
-    lfHeight = -int(font_size) 
-    
-    hfont = gdi32.CreateFontW(
-        lfHeight, 0, 0, 0, 
-        FW_NORMAL, 0, 0, 0, 
-        ARABIC_CHARSET, 
-        OUT_TT_PRECIS, 
-        CLIP_DEFAULT_PRECIS, 
-        CLEARTYPE_QUALITY, 
-        DEFAULT_PITCH | FF_DONTCARE, 
-        font_name
-    )
-    
-    old_font = gdi32.SelectObject(hdc_mem, hfont)
-    
-    # 4. Setup Graphics
-    # Clear background (Transparent is easier if we use black bg then convert to alpha?)
-    # GDI DrawText doesn't handle Alpha channel in RGB easily.
-    # Approach: Draw white text on black background. Use result as Alpha mask?
-    # Or text_color on transparent?
-    # Simple approach: Draw text on black. Luma = Alpha.
-    
-    # Fill Black
-    bk_rect = wintypes.RECT(0, 0, width, height)
-    # GetStockObject(BLACK_BRUSH) = 4
-    fill_brush = gdi32.GetStockObject(4) 
-    user32.FillRect(hdc_mem, ctypes.byref(bk_rect), fill_brush)
-    
-    # Set Text properties
-    gdi32.SetBkMode(hdc_mem, TRANSPARENT)
-    gdi32.SetTextColor(hdc_mem, 0x00FFFFFF) # White BGR
-    
-    # Calculate vertical position
-    # DT_VCENTER only works with DT_SINGLELINE. For multiline, we must measure.
-    rect_measure = wintypes.RECT(10, 10, width - 10, height - 10) # Initial constraints
-    flags_base = DT_CENTER | DT_WORDBREAK | DT_RTLREADING | DT_NOPREFIX
-    
-    # Measure
-    gdi32.SetBkMode(hdc_mem, TRANSPARENT) # Ensure setup
-    gdi32.SetTextColor(hdc_mem, 0x00FFFFFF)
-    
-    # Copy rect for measurement
-    rect_calc = wintypes.RECT(rect_measure.left, rect_measure.top, rect_measure.right, rect_measure.bottom)
-    user32.DrawTextW(hdc_mem, text, -1, ctypes.byref(rect_calc), flags_base | 0x00000400) # DT_CALCRECT = 0x400
-    
-    text_height = rect_calc.bottom - rect_calc.top
-    avail_height = height - 20 # Margins
-    
-    y_offset = (avail_height - text_height) // 2
-    if y_offset < 0: y_offset = 0
-    
-    # Final Draw
-    rect_draw = wintypes.RECT(rect_measure.left, 10 + y_offset, rect_measure.right, 10 + y_offset + text_height)
-    user32.DrawTextW(hdc_mem, text, -1, ctypes.byref(rect_draw), flags_base)
-    
-    # 6. Extract Bits
-    bmi = BITMAPINFO()
-    bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-    bmi.bmiHeader.biWidth = width
-    bmi.bmiHeader.biHeight = -height # Top-down
-    bmi.bmiHeader.biPlanes = 1
-    bmi.bmiHeader.biBitCount = 32
-    bmi.bmiHeader.biCompression = 0 # BI_RGB
-    
-    buffer = ctypes.create_string_buffer(width * height * 4)
-    gdi32.GetDIBits(hdc_mem, hbitmap, 0, height, buffer, ctypes.byref(bmi), 0)
-    
-    # 7. Create PIL Image
-    # Image is BGRA (on little endian Windows 32-bit bitmap)
+    # Pre-cache at a default size to verify the file is valid
     try:
-        image = Image.frombytes("RGBA", (width, height), buffer.raw, "raw", "BGRA")
-    except:
-        # Fallback if mode differs
-        image = Image.frombytes("RGB", (width, height), buffer.raw, "raw", "BGRX")
-    
-    # 8. Cleanup
-    gdi32.SelectObject(hdc_mem, old_bitmap)
-    gdi32.SelectObject(hdc_mem, old_font)
-    gdi32.DeleteObject(hbitmap)
-    gdi32.DeleteObject(hfont)
-    gdi32.DeleteDC(hdc_mem)
-    user32.ReleaseDC(hwin, hdc_screen)
-    
-    # Post-processing:
-    # We drew white text on black.
-    # Convert to user color with transparency.
-    # Take the Blue channel (or Grayscale) as Alpha.
-    
-    alpha = image.convert("L")
-    
-    # Create final image
-    final_img = Image.new("RGBA", (width, height), text_color)
-    final_img.putalpha(alpha)
-    
-    return final_img
+        _font_cache[font_path] = ImageFont.truetype(font_path, 50)
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to load font {font_path}: {e}")
+        return False
 
-    return final_img
 
-def measure_text_height(text, font_name, font_size, width):
+def _get_font(font_path, size):
+    """Get a font object, using cache when possible."""
+    key = (font_path, size)
+    if key not in _font_cache:
+        _font_cache[key] = ImageFont.truetype(font_path, size)
+    return _font_cache[key]
+
+
+def _reshape_arabic(text):
+    """Apply Arabic reshaping and bidi reordering for correct display."""
+    reshaped = arabic_reshaper.reshape(text)
+    return get_display(reshaped)
+
+
+def _wrap_text(text, font, max_width, draw):
     """
-    Measure the height of the text for a given width and font size.
+    Word-wrap Arabic text to fit within max_width.
+    Returns a list of lines.
+    """
+    words = text.split()
+    lines = []
+    current_line = ""
+
+    for word in words:
+        test_line = word if not current_line else current_line + " " + word
+        bbox = draw.textbbox((0, 0), test_line, font=font)
+        line_width = bbox[2] - bbox[0]
+
+        if line_width <= max_width:
+            current_line = test_line
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = word
+
+    if current_line:
+        lines.append(current_line)
+
+    return lines if lines else [text]
+
+
+def render_text_to_image(text, font_path, font_size, width, height,
+                         text_color=(255, 255, 255)):
+    """
+    Render Arabic text to a PIL RGBA Image with transparent background.
+
+    Uses arabic_reshaper + python-bidi for correct glyph shaping,
+    then Pillow for rasterisation. Works on all platforms.
+
+    Args:
+        text: Raw Uthmani Arabic text.
+        font_path: Path to the .ttf font file (not a face name).
+        font_size: Font size in pixels.
+        width, height: Canvas dimensions.
+        text_color: RGB tuple for the text colour.
+
+    Returns:
+        PIL.Image in RGBA mode.
+    """
+    # Reshape Arabic text for correct glyph rendering
+    display_text = _reshape_arabic(text)
+
+    font = _get_font(font_path, font_size)
+
+    # Use a scratch image for measurement
+    scratch = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(scratch)
+
+    margin = 50
+    max_width = width - (margin * 2)
+
+    # Word-wrap
+    lines = _wrap_text(display_text, font, max_width, draw)
+
+    # Measure total text block height
+    line_spacing = int(font_size * 0.35)
+    total_height = 0
+    line_heights = []
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        h = bbox[3] - bbox[1]
+        line_heights.append(h)
+        total_height += h
+    total_height += line_spacing * max(0, len(lines) - 1)
+
+    # Create final transparent image
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Vertical centering
+    y = max(margin, (height - total_height) // 2)
+
+    for i, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        line_width = bbox[2] - bbox[0]
+        # Horizontal centering
+        x = (width - line_width) // 2
+
+        # Draw shadow for readability
+        shadow_offset = max(2, font_size // 30)
+        draw.text((x + shadow_offset, y + shadow_offset), line, font=font,
+                  fill=(0, 0, 0, 160))
+
+        # Draw main text
+        draw.text((x, y), line, font=font, fill=text_color + (255,))
+
+        y += line_heights[i] + line_spacing
+
+    return img
+
+
+def measure_text_height(text, font_path, font_size, width):
+    """
+    Measure the height of wrapped Arabic text for a given width and font size.
     Returns the calculated height in pixels.
     """
-    # 1. Create Device Contexts
-    hwin = user32.GetDesktopWindow()
-    hdc_screen = user32.GetDC(hwin)
-    hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
-    
-    # 2. Create Font
-    lfHeight = -int(font_size)
-    
-    hfont = gdi32.CreateFontW(
-        lfHeight, 0, 0, 0, 
-        FW_NORMAL, 0, 0, 0, 
-        ARABIC_CHARSET, # Changed for better shaping
-        OUT_TT_PRECIS, 
-        CLIP_DEFAULT_PRECIS, 
-        CLEARTYPE_QUALITY, 
-        DEFAULT_PITCH | FF_DONTCARE, 
-        font_name
-    )
-    
-    old_font = gdi32.SelectObject(hdc_mem, hfont)
-    
-    # 3. Measure
-    rect = wintypes.RECT(0, 0, width, 0) # Height ignored for calculation usually, but we need meaningful width
-    flags_base = DT_CENTER | DT_WORDBREAK | DT_RTLREADING | DT_NOPREFIX | 0x00000400 # DT_CALCRECT
-    
-    user32.DrawTextW(hdc_mem, text, -1, ctypes.byref(rect), flags_base)
-    
-    measured_height = rect.bottom - rect.top
-    
-    # 4. Cleanup
-    gdi32.SelectObject(hdc_mem, old_font)
-    gdi32.DeleteObject(hfont)
-    gdi32.DeleteDC(hdc_mem)
-    user32.ReleaseDC(hwin, hdc_screen)
-    
-    return measured_height
+    display_text = _reshape_arabic(text)
+    font = _get_font(font_path, font_size)
+
+    scratch = Image.new("RGBA", (width, 100), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(scratch)
+
+    margin = 50
+    max_width = width - (margin * 2)
+
+    lines = _wrap_text(display_text, font, max_width, draw)
+
+    line_spacing = int(font_size * 0.35)
+    total_height = 0
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        total_height += bbox[3] - bbox[1]
+    total_height += line_spacing * max(0, len(lines) - 1)
+
+    return total_height
+
 
 if __name__ == "__main__":
-    # Self test
-    font_path = r"c:\Quran\fonts\UthmanTNB_v2-0.ttf"
+    import sys
+    import os
+
+    # Self-test
+    font_path = os.path.join(os.path.dirname(__file__), "..", "fonts",
+                             "Amiri-Quran.ttf")
+    if not os.path.exists(font_path):
+        print(f"Font not found at {font_path}")
+        sys.exit(1)
+
     if load_private_font(font_path):
         print("Font loaded")
-        text = "بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ"
-        img = render_text_to_image(text, "KFGQPC Uthman Taha Naskh", 100, 800, 300)
-        img.save("test_gdi.png")
-        print("Saved test_gdi.png")
-        
-        h = measure_text_height(text, "KFGQPC Uthman Taha Naskh", 100, 800)
+        text = "\u0628\u0650\u0633\u06e1\u0645\u0650 \u0671\u0644\u0644\u0651\u064e\u0647\u0650 \u0671\u0644\u0631\u0651\u064e\u062d\u06e1\u0645\u064e\u0670\u0646\u0650 \u0671\u0644\u0631\u0651\u064e\u062d\u0650\u064a\u0645\u0650"
+        img = render_text_to_image(text, font_path, 100, 800, 300)
+        img.save("test_renderer.png")
+        print("Saved test_renderer.png")
+
+        h = measure_text_height(text, font_path, 100, 800)
         print(f"Measured Height: {h}")
     else:
-        print("Failed load font")
+        print("Failed to load font")

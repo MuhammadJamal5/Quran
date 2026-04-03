@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 import os
+import sys
 import subprocess
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -17,10 +18,6 @@ from threading import Timer
 
 app = Flask(__name__)
 CORS(app)
-
-import sys
-from pathlib import Path
-# ... imports ...
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -441,163 +438,72 @@ def find_quran_font():
     print("=" * 70)
     return None
 
-def validate_quran_glyph_support(font_path, test_text):
-    """
-    Validate that the font supports all required Quran glyphs.
-    Returns True if all glyphs are supported, False otherwise.
-    """
-    try:
-        from PIL import ImageFont, Image, ImageDraw
-        font = ImageFont.truetype(font_path, 50)
-        
-        # Create test image
-        img = Image.new('RGB', (100, 100), 'white')
-        draw = ImageDraw.Draw(img)
-        
-        # Try to render the text
-        draw.text((10, 10), test_text, font=font, fill='black')
-        
-        # Check for missing glyph indicators (typically .notdef boxes)
-        # This is a basic check - more sophisticated validation could be added
-        return True
-        
-    except Exception as e:
-        print(f"⚠️ Glyph validation warning: {e}")
-        return False
-
-
-
 
 def create_text_overlay_png(text, width=1080, height=1920, font_size=None):
     """
     Create text overlay with authentic Quran rendering.
-    
-    CRITICAL CORRECTNESS REQUIREMENT:
-    - Text is rendered EXACTLY as received from Uthmani source
-    - NO reshaping, NO bidi transformation, NO preprocessing
-    - UthmanTNB font handles Arabic RTL and ligatures natively
-    - Tashkeel (diacritics) MUST remain identical to source
+
+    Uses cross-platform Pillow renderer with arabic_reshaper + python-bidi
+    for correct Arabic glyph shaping and RTL layout.
+    Tashkeel (diacritics) are preserved exactly as received from source.
     """
     print(f"Creating Quran caption overlay (preserving tashkeel)...")
-    
-    # Create transparent canvas
-    img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    
-    # Load Quran font
+
     font_path = find_quran_font()
     if not font_path:
         print("[ERROR] No Quran font found! Cannot create caption.")
         return None
-    
-    # Dynamic font size based on text length
-    text_length = len(text)
-    if font_size is None:
-        if text_length > 200:
-            font_size = 85
-        elif text_length > 100:
-            font_size = 100
-        elif text_length > 50:
-            font_size = 120
-        else:
-            font_size = 140
-    
-    try:
-        font = ImageFont.truetype(font_path, font_size)
-        print(f"[OK] Using font: {os.path.basename(font_path)} (size: {font_size})")
-    except Exception as e:
-        print(f"[ERROR] Font loading failed: {e}")
-        return None
-    
-    # Safe margins to prevent edge clipping
-    margin = 100
-    max_width = width - (margin * 2)
-    
-    # Safe margins
-    margin = 50 
-    max_width = width - (margin * 2)
-    max_height = height - (margin * 2)
-    
-    # Sanitize Text: Collapse specific whitespace but NEVER touch Tashkeel
+
+    # Sanitize whitespace but NEVER touch tashkeel
     if text:
         text = " ".join(text.split())
-    
-    # Text Processing: GDI handles shaping. We just pass the Uthmani text.
-    # Font Logic: Use GDI renderer
+
     import windows_renderer
-    
-    font_path = find_quran_font()
-    if not font_path:
-        return None
-        
-    # Load into GDI (safe to call multiple times)
+
+    # Ensure font is loaded (safe to call multiple times)
     windows_renderer.load_private_font(font_path)
-    # Exact Face Name from verify step
-    font_face_name = "Amiri" 
-    
-    # Dynamic Font Sizing (Iterative Fit)
-    max_font_size = 120 # Reduced from 150 as requested
+
+    # Dynamic font sizing: find largest size that fits the canvas
+    margin = 50
+    max_width = width - (margin * 2)
+    max_height = height - (margin * 2)
+
+    max_font_size = 120
     min_font_size = 40
     current_font_size = max_font_size
-    
+
     print(f"  Calculating optimal font size for {len(text)} chars...")
-    
+
     while current_font_size >= min_font_size:
-        # Measure height given the fixed width
         measured_height = windows_renderer.measure_text_height(
-            text, 
-            font_face_name, 
-            current_font_size, 
-            max_width
+            text, font_path, current_font_size, max_width
         )
-        
-        # Check if fits nicely
         if measured_height <= max_height:
             print(f"  [FIT] Size {current_font_size} -> Height {measured_height}px (Max {max_height}px)")
             font_size = current_font_size
             break
-        
         current_font_size -= 5
     else:
         print(f"  [WARN] Text too long, using minimum size {min_font_size}")
         font_size = min_font_size
 
-    # Render using Windows GDI
-    print(f"[RENDER] using Windows GDI Native Engine. Size: {font_size}")
-    
+    print(f"[RENDER] Cross-platform Pillow engine. Size: {font_size}")
+
     try:
         final_img = windows_renderer.render_text_to_image(
-            text, 
-            font_face_name, 
-            font_size, 
-            width, 
-            height,
-            text_color=(255, 255, 255) # White
+            text, font_path, font_size, width, height,
+            text_color=(255, 255, 255)
         )
-        
-        # Add a Stroke? GDI path is hard.
-        # But we can simulate stroke in PIL using the output image alpha?
-        # Or just rely on shadow (GDI render supports shadow if we draw twice).
-        # Our renderer creates white text.
-        # Let's add stroke/shadow using basic image processing if needed.
-        # For now, clean white text is better than broken text.
-        # We can add a simple Drop Shadow by rendering black text first?
-        # windows_renderer creates a single image.
-        
-        # Better: Draw Stroke in PIL using the alpha channel from GDI result.
-        # Or just keep it clean. User asked for "Optional stroke".
-        # Let's add a Drop Shadow using image offset.
-        
-        # Save
+
         filename = f"text_{abs(hash(text))}_{random.randint(1000,9999)}.png"
         filepath = TEMP_DIR / filename
         final_img.save(filepath, "PNG")
-        
-        print(f"[OK] GDI Caption generated: {filename}")
+
+        print(f"[OK] Caption generated: {filename}")
         return str(filepath)
-        
+
     except Exception as e:
-        print(f"[ERROR] GDI Render failed: {e}")
+        print(f"[ERROR] Render failed: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -1055,9 +961,6 @@ def validate_audio():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-import webbrowser
-import threading
 
 def open_browser():
     """Open the browser automatically"""
