@@ -32,18 +32,18 @@ if _MISSING:
     print("=" * 60)
     sys.exit(1)
 
-# Check ffmpeg
+# Check ffmpeg (warn but don't exit — the launcher scripts handle installation)
 try:
     subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
 except (FileNotFoundError, subprocess.CalledProcessError):
     print("=" * 60)
-    print("[ERROR] ffmpeg not found!")
-    print("  Install it:")
-    print("    Windows : https://ffmpeg.org/download.html")
+    print("[WARNING] ffmpeg not found on PATH!")
+    print("  The launcher (Run_App.bat / run.sh) installs it automatically.")
+    print("  If you ran main.py directly, install ffmpeg first:")
+    print("    Windows : Run_App.bat (auto-installs)")
     print("    macOS   : brew install ffmpeg")
     print("    Linux   : sudo apt install ffmpeg")
     print("=" * 60)
-    sys.exit(1)
 # ────────────────────────────────────────────────────────────────────
 
 from flask import Flask, request, jsonify, send_from_directory
