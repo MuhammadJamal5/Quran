@@ -15,7 +15,7 @@ from threading import Timer
 _MISSING = []
 for _mod, _pkg in [
     ("flask", "flask"), ("flask_cors", "flask-cors"), ("requests", "requests"),
-    ("PIL", "pillow"), ("pydub", "pydub"), ("arabic_reshaper", "arabic-reshaper"),
+    ("PIL", "pillow"), ("arabic_reshaper", "arabic-reshaper"),
     ("bidi", "python-bidi"),
 ]:
     try:
@@ -50,7 +50,6 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from pydub import AudioSegment
 
 app = Flask(__name__)
 CORS(app)
@@ -358,10 +357,14 @@ def download_audio(reciter, surah, ayah):
     return download_audio_with_fallback(reciter, surah, ayah)
 
 def get_audio_duration(audio_path):
-    """Get audio duration safely"""
+    """Get audio duration in seconds using ffprobe."""
     try:
-        audio = AudioSegment.from_mp3(audio_path)
-        duration = len(audio) / 1000.0
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', str(audio_path)],
+            capture_output=True, text=True, check=True
+        )
+        duration = float(result.stdout.strip())
         return max(duration, 3.0)
     except Exception as e:
         print(f"Error getting duration: {e}")
